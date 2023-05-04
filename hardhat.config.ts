@@ -1,5 +1,7 @@
 import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
+import dotenv from 'dotenv';
+dotenv.config();
 
 
 
@@ -24,18 +26,18 @@ const config: HardhatUserConfig = {
     },
     polygon_mumbai: {
       url: "https://rpc-mumbai.maticvigil.com",
-      accounts: [PRIVATE_KEY]
+      accounts: [process.env.PRIVATE_KEY ??""]
     },
-     sepolia: {
+    sepolia: {
       url: `https://rpc.sepolia.org/`,
-      accounts: [PRIVATE_KEY],
+      accounts: [process.env.PRIVATE_KEY ?? ""],
       chainId: 11155111,
     },
   },
   etherscan: {
-    apiKey: POLYGONSCAN_API_KEY
+    apiKey: process.env.POLYGONSCAN_API_KEY
   },
-  
+
 };
 
 export default config;

@@ -8,6 +8,8 @@ async function main() {
 
     await factory.deployed();
 
+    
+
     console.log(
         `Factory deployed to ${factory.address}`
     );
