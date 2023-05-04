@@ -5,15 +5,9 @@ pragma solidity ^0.8.17;
 aggiungere le funzioni per permettere di aggiungere e rimuovere partecipanti al multisig (addOwner, removeOwner),quindi implementare il sistema di 
 votazione da parte dei membri per l aggiunta e la rimozione della nuova persona(vedere sistema votazione transazione).
 
+aggiungere la possibilità di modificare il numero di conferme.
+
 implementare per questo multisig l utilizzo di erc20 e erc721 (capire se implementare 1155)
-
-
-
-
-
-
-
-
 
 
 
@@ -131,6 +125,7 @@ contract MultiSigWallet {
     }
 
     // questa funzione non funziona è da rivedere
+    //usare assembly?
     function executeTransaction(
         uint _txIndex
     ) public onlyOwner txExists(_txIndex) notExecuted(_txIndex) {
@@ -162,6 +157,37 @@ contract MultiSigWallet {
         isConfirmed[_txIndex][msg.sender] = false;
 
         emit RevokeConfirmation(msg.sender, _txIndex);
+    }
+         
+    //nuova funzione per aggiungere l'owner
+    function addOwner(address newOwner) public onlyOwner {
+    require(newOwner != address(0), "invalid owner");
+    require(!isOwner[newOwner], "owner already exists");
+
+    isOwner[newOwner] = true;
+    owners.push(newOwner);
+
+//aggiungere richiesta conferma altri owner
+
+    }
+
+    function removeOwner(address ownerToRemove) public onlyOwner {
+    require(isOwner[ownerToRemove], "owner not found");
+    require(owners.length > 1, "cannot remove last owner");
+
+    for (uint256 i = 0; i < owners.length; i++) {
+        if (owners[i] == ownerToRemove) {
+            // Rimuove il proprietario dall'array spostando tutti gli elementi successivi a sinistra
+            for (uint256 j = i; j < owners.length - 1; j++) {
+                owners[j] = owners[j+1];
+            }
+            owners.pop();
+            break;
+        }
+        //aggiungere richiesta conferma altri owner
+    }
+
+    isOwner[ownerToRemove] = false;
     }
 
     function getOwners() public view returns (address[] memory) {
