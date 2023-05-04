@@ -6,15 +6,7 @@ aggiungere le funzioni per permettere di aggiungere e rimuovere partecipanti al 
 votazione da parte dei membri per l aggiunta e la rimozione della nuova persona(vedere sistema votazione transazione).
 
 implementare per questo multisig l utilizzo di erc20 e erc721 (capire se implementare 1155)
-
-
-
-
-
-
-
-
-
+BISOGNA IMPLEMENTARE INTERFACCIA, DEPOSIT WITHDRAW E EXECUTION
 
 
 */
@@ -130,7 +122,7 @@ contract MultiSigWallet {
         emit ConfirmTransaction(msg.sender, _txIndex);
     }
 
-    // questa funzione non funziona è da rivedere
+    // questa funzione non funziona è da rivedere PROBLEMA CON I DATA
     function executeTransaction(
         uint _txIndex
     ) public onlyOwner txExists(_txIndex) notExecuted(_txIndex) {
@@ -195,4 +187,138 @@ contract MultiSigWallet {
             transaction.numConfirmations
         );
     }
+   event AddOwner(address indexed owner, uint indexed operationIndex);
+    event ConfirmAddOwner(address indexed owner, uint indexed operationIndex);
+    event ExecuteAddOwner(address indexed owner, address indexed newOwner, uint indexed operationIndex);
+
+    struct AddOwnerOperation {
+        address newOwner;
+        bool executed;
+        uint numConfirmations;
+    }
+
+    // mapping from operation index => owner => bool
+    mapping(uint => mapping(address => bool)) public isAddOwnerConfirmed;
+
+    AddOwnerOperation[] public addOwnerOperations;
+
+  
+
+    function submitAddOwner(address _newOwner) public onlyOwner {
+        require(!isOwner[_newOwner], "Address is already an owner");
+
+        uint operationIndex = addOwnerOperations.length;
+
+        addOwnerOperations.push(AddOwnerOperation({
+            newOwner: _newOwner,
+            executed: false,
+            numConfirmations: 0
+        }));
+
+        emit AddOwner(_newOwner, operationIndex);
+    }
+
+    function confirmAddOwner(uint _operationIndex) public onlyOwner {
+        require(_operationIndex < addOwnerOperations.length, "Operation does not exist");
+        require(!addOwnerOperations[_operationIndex].executed, "Operation already executed");
+        require(!isAddOwnerConfirmed[_operationIndex][msg.sender], "Operation already confirmed");
+
+        AddOwnerOperation storage operation = addOwnerOperations[_operationIndex];
+        operation.numConfirmations += 1;
+        isAddOwnerConfirmed[_operationIndex][msg.sender] = true;
+
+        emit ConfirmAddOwner(msg.sender, _operationIndex);
+    }
+
+    function executeAddOwner(uint _operationIndex) public onlyOwner {
+        require(_operationIndex < addOwnerOperations.length, "Operation does not exist");
+
+        AddOwnerOperation storage operation = addOwnerOperations[_operationIndex];
+
+        require(!operation.executed, "Operation already executed");
+        require(operation.numConfirmations >= numConfirmationsRequired, "Not enough confirmations");
+
+        operation.executed = true;
+        isOwner[operation.newOwner] = true;
+        owners.push(operation.newOwner);
+
+        emit ExecuteAddOwner(msg.sender, operation.newOwner, _operationIndex);
+    }
+
+    
+
+
+
+
+
+
+    event RemoveOwner(address indexed owner, uint indexed operationIndex);
+    event ConfirmRemoveOwner(address indexed owner, uint indexed operationIndex);
+    event ExecuteRemoveOwner(address indexed owner, address indexed removedOwner, uint indexed operationIndex);
+
+    struct RemoveOwnerOperation {
+        address ownerToRemove;
+        bool executed;
+        uint numConfirmations;
+    }
+
+    // mapping from operation index => owner => bool
+    mapping(uint => mapping(address => bool)) public isRemoveOwnerConfirmed;
+
+    RemoveOwnerOperation[] public removeOwnerOperations;
+
+    
+    function submitRemoveOwner(address _ownerToRemove) public onlyOwner {
+        require(isOwner[_ownerToRemove], "Address is not an owner");
+        require(owners.length > numConfirmationsRequired, "Cannot remove owner when there are not enough owners left");
+
+        uint operationIndex = removeOwnerOperations.length;
+
+        removeOwnerOperations.push(RemoveOwnerOperation({
+            ownerToRemove: _ownerToRemove,
+            executed: false,
+            numConfirmations: 0
+        }));
+
+        emit RemoveOwner(_ownerToRemove, operationIndex);
+    }
+
+    function confirmRemoveOwner(uint _operationIndex) public onlyOwner {
+        require(_operationIndex < removeOwnerOperations.length, "Operation does not exist");
+        require(!removeOwnerOperations[_operationIndex].executed, "Operation already executed");
+        require(!isRemoveOwnerConfirmed[_operationIndex][msg.sender], "Operation already confirmed");
+
+        RemoveOwnerOperation storage operation = removeOwnerOperations[_operationIndex];
+        operation.numConfirmations += 1;
+        isRemoveOwnerConfirmed[_operationIndex][msg.sender] = true;
+
+        emit ConfirmRemoveOwner(msg.sender, _operationIndex);
+    }
+
+    function executeRemoveOwner(uint _operationIndex) public onlyOwner {
+        require(_operationIndex < removeOwnerOperations.length, "Operation does not exist");
+
+        RemoveOwnerOperation storage operation = removeOwnerOperations[_operationIndex];
+
+        require(!operation.executed, "Operation already executed");
+        require(operation.numConfirmations >= numConfirmationsRequired, "Not enough confirmations");
+
+        operation.executed = true;
+        isOwner[operation.ownerToRemove] = false;
+        // putting ownerToRemove at end of array and then removing it 
+        for (uint i = 0; i < owners.length; i++) {
+            if (owners[i] == operation.ownerToRemove) {
+                owners[i] = owners[owners.length - 1];
+                owners.pop();
+                break;
+            }
+        }
+
+        emit ExecuteRemoveOwner(msg.sender,operation.ownerToRemove, _operationIndex);
+    }
+
+   
 }
+
+
+
