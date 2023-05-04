@@ -4,12 +4,6 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 
-
-const PRIVATE_KEY =
-  "529920105e2db45ee65119654b84cc4ac7c21292e8c2c425a95f3cb3a7c9411a";
-
-const POLYGONSCAN_API_KEY = "A8GM6M48B2Z1DYP8FTT6W9JTA1M7SJS5T2";
-
 const config: HardhatUserConfig = {
   solidity: {
     version: "0.8.17",
