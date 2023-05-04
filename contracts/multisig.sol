@@ -1,24 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.17;
 
-/*
-aggiungere le funzioni per permettere di aggiungere e rimuovere partecipanti al multisig (addOwner, removeOwner),quindi implementare il sistema di 
-votazione da parte dei membri per l aggiunta e la rimozione della nuova persona(vedere sistema votazione transazione).
-
-implementare per questo multisig l utilizzo di erc20 e erc721 (capire se implementare 1155)
-
-
-
-
-
-
-
-
-
-
-
-*/
-
 contract MultiSigWallet {
     event Deposit(address indexed sender, uint amount, uint balance);
     event SubmitTransaction(
