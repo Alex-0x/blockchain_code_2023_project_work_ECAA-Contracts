@@ -30,7 +30,7 @@ contract MultiSigWallet {
     //index per owner
     event ProposeNewOwner( address indexed owner, uint indexed ownerIndex, address indexed newOwner);
     event ConfirmNewOwner(address indexed owner, uint indexed ownerIndex);
-    event ExecuteAddOwner(address indexed owner, uint indexed ownerIndex);
+    event ExecuteAddOwner(address indexed owner, uint indexed ownerIndex, address indexed newOwner);
 
     struct Ownership {
         address newOwner;
@@ -40,7 +40,7 @@ contract MultiSigWallet {
 
     event ProposeRemoveOwner(address indexed owner, uint indexed removeIndex, address indexed addressRemove);
     event ConfirmeRemoveOwner(address indexed owner, uint indexed removeIndex);
-    event ExcuteRemoveOwner(address indexed owner, uint indexed removeIndex);
+    event ExcuteRemoveOwner(address indexed owner, uint indexed removeIndex, address indexed addressRemove);
 
 
     struct Deleting {
@@ -64,7 +64,7 @@ contract MultiSigWallet {
     event ProposeChangeOwner(address indexed owner, uint indexed rescueIndex, address oldOwner, address indexed newOwner);
     event ConfirmeChangeOwner(address indexed owner, uint indexed rescueIndex);
     event ImAmHere(address indexed owner, uint indexed rescueIndex );
-    event ExcuteChangeOwner(address indexed owner, uint indexed rescueIndex);
+    event ExcuteChangeOwner(address indexed owner, uint indexed rescueIndex, address oldOWner, address indexed newOwner);
     
 
     struct Rescue {
@@ -75,7 +75,6 @@ contract MultiSigWallet {
         bool imHere;
         uint256 timeToUnLock;
         bool lock;
-        bool unlock;
     }
 
     // mapping from tx index => owner => bool
@@ -241,7 +240,7 @@ contract MultiSigWallet {
 
         require(
             transaction.numConfirmations >= numConfirmationsRequired,
-            "cannot execute tx"
+            "number confirmations too low"
         );
 
         transaction.executed = true;
@@ -314,7 +313,7 @@ contract MultiSigWallet {
         owners.push(newOwner);
 
 
-        emit ExecuteAddOwner(msg.sender, _ownerIndex);
+        emit ExecuteAddOwner(msg.sender, _ownerIndex, newOwner);
     }
 
  function proposeRemoveOwner(address _addressRemove) public onlyOwner {
@@ -358,7 +357,7 @@ function excuteRemoveOwner(
     require(owners.length > 1, "cannot remove last owner");
     require(
             deleting.numConfirmations >= numTreshold,
-            "cannot execute tx"
+            "number of confirmations too low"
         );
 
         deleting.removeExecuted = true;
@@ -377,15 +376,15 @@ function excuteRemoveOwner(
     isOwner[addressRemove] = false;
     }
 
-        emit ExcuteRemoveOwner(msg.sender, _removeIndex);
+        emit ExcuteRemoveOwner(msg.sender, _removeIndex, addressRemove);
     }
 
 
      function proposeNewTreshold(uint _newNumTreshold) public onlyOwner {
             uint tresholdIndex = tresholds.length;
 
-            require(_newNumTreshold > 0 , "treshold minore di uno");
-            require(_newNumTreshold < owners.length, "treshold maggiore o uguale agli owner");
+            require(_newNumTreshold > 0 , "cannot be 0");
+            require(_newNumTreshold < owners.length, "treshold minore degli owner ");
 
         tresholds.push(
             Treshold({
@@ -427,7 +426,7 @@ function excuteRemoveOwner(
 
         
         treshold.tresholdExecuted = true;
-        newNumTreshold = numTreshold;
+        numTreshold = treshold.newNumTreshold;
 
         
         emit ExecuteNewTreshold(msg.sender, _tresholdIndex);
@@ -436,6 +435,8 @@ function excuteRemoveOwner(
 
     function proposeChangeOwner(address _oldOwner, address _newOwner) public onlyOwner {
             uint rescueIndex = resc.length;
+
+           require(!isOwner[_newOwner] && _newOwner != address(0), "already owner or address 0");
             
 
         resc.push(
@@ -446,7 +447,6 @@ function excuteRemoveOwner(
                 numConfirmations: 0,
                 imHere: false,
                 lock: true,
-                unlock: false,
                 timeToUnLock: block.timestamp + 2 minutes
 
             })
@@ -502,10 +502,9 @@ function excuteRemoveOwner(
         
         if(block.timestamp >= rescue.timeToUnLock && rescue.lock) {
             rescue.lock = false;
-            rescue.unlock = true;
         }
 
-        require(rescue.lock == false && rescue.unlock == true, "tempo non ancora passato");
+        require(rescue.lock == false, "tempo non ancora passato");
         
 
         
@@ -522,11 +521,15 @@ function excuteRemoveOwner(
             owners.push(newOwner);
             break;
         }
-        emit ExecuteAddOwner(msg.sender, _rescueIndex);
+        emit ExcuteChangeOwner(msg.sender, _rescueIndex, oldOwner, newOwner);
     }
 }
 
 
+    function getTimeToUnlock(uint _rescueIndex) public view returns (uint) {
+        Rescue storage rescue = resc[_rescueIndex];
+        return (rescue.timeToUnLock - block.timestamp); 
+    }
     function getOwners() public view returns (address[] memory) {
         return owners;
     }
