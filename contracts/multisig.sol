@@ -1,17 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.17;
 
-/*
-aggiungere le funzioni per permettere di aggiungere e rimuovere partecipanti al multisig (addOwner, removeOwner),quindi implementare il sistema di 
-votazione da parte dei membri per l aggiunta e la rimozione della nuova persona(vedere sistema votazione transazione).
-
-aggiungere la possibilità di modificare il numero di conferme.
-
-implementare per questo multisig l utilizzo di erc20 e erc721 (capire se implementare 1155)
-
-
-
-*/
 
 contract MultiSigWallet {
     event Deposit(address indexed sender, uint amount, uint balance);
@@ -37,14 +26,71 @@ contract MultiSigWallet {
         bool executed;
         uint numConfirmations;
     }
+    //index per owner
+    event ProposeNewOwner( address indexed owner, uint indexed ownerIndex, address indexed newOwner);
+    event ConfirmNewOwner(address indexed owner, uint indexed ownerIndex);
+    event ExecuteAddOwner(address indexed owner, uint indexed ownerIndex);
+
+    struct Ownership {
+        address newOwner;
+        bool addExecuted;
+        uint numConfirmations;
+    }
+
+    event ProposeRemoveOwner(address indexed owner, uint indexed removeIndex, address indexed addressRemove);
+    event ConfirmeRemoveOwner(address indexed owner, uint indexed removeIndex);
+    event ExdecuteRemoveOwner(address indexed owner, uint indexed removeIndex);
+
+    struct Deleting {
+        address addressRemove;
+        bool removeExecuted;
+        uint numConfirmations;
+
+    }
+
+    event ConfirmNewTreshold(address indexed owner, uint indexed txIndex);
+    event ExecuteNewTreshold(address indexed owner, uint indexed txIndex);
+
+    struct Treshold {
+        uint newNumConfirmations;
+        bytes data;
+        bool executed;
+        uint numConfirmations;
+    }
+
+    event ProposeChangeOwner(address indexed owner, uint indexed txIndex);
+    event ImAmHere(address indexed owner, uint indexed txIndex );
+    event ExcuteChangeOwner(address indexed owner, uint indexed txIndex);
+
+    struct Rescue {
+        address oldOwner;
+        address newOwner;
+        bytes data;
+        bool executed;
+        uint numConfirmations;
+    }
 
     // mapping from tx index => owner => bool
     mapping(uint => mapping(address => bool)) public isConfirmed;
+    mapping(uint => mapping(address => bool)) public IsAddNewOwner;
+    mapping(uint => mapping(address => bool)) public isRemoveOwner;
 
     Transaction[] public transactions;
+    Ownership[] public ownerships;
+    Deleting[] public delet;
+    
+
 
     modifier onlyOwner() {
         require(isOwner[msg.sender], "not owner");
+        _;
+    }
+    modifier ownerExists(uint _ownerIndex) {
+        require(_ownerIndex < ownerships.length, "owner does not exist" );
+        _;
+    }
+    modifier ownerRemoverExists(uint _removeIndex) {
+        require(_removeIndex < delet.length, "owner does not exist" );
         _;
     }
 
@@ -52,11 +98,33 @@ contract MultiSigWallet {
         require(_txIndex < transactions.length, "tx does not exist");
         _;
     }
+    
+    modifier notExecutedAddOwner(uint _ownerIndex) {
+        require(!ownerships[_ownerIndex].addExecuted, "add owner already executed");
+        _;
+    }
+
+    modifier notExecutedRemoveOwner(uint _removeIndex) {
+        require(!delet[_removeIndex].removeExecuted, "remove alrady executed");
+        _;
+    }
 
     modifier notExecuted(uint _txIndex) {
         require(!transactions[_txIndex].executed, "tx already executed");
         _;
     }
+    
+
+    modifier notConfirmedAddOwner(uint _ownerIndex) {
+        require(!IsAddNewOwner[_ownerIndex][msg.sender], "add owner already confirmed");
+        _;
+    }
+
+     modifier notConfirmedRemoveOwner(uint _removeIndex) {
+        require(!isRemoveOwner[_removeIndex][msg.sender], "Remove owner already confirmed");
+        _;
+    }
+
 
     modifier notConfirmed(uint _txIndex) {
         require(!isConfirmed[_txIndex][msg.sender], "tx already confirmed");
@@ -139,7 +207,7 @@ contract MultiSigWallet {
         transaction.executed = true;
 
         (bool success, ) = transaction.to.call{value: transaction.value}(
-            transaction.data
+            ""
         );
         require(success, "tx failed");
 
@@ -158,25 +226,105 @@ contract MultiSigWallet {
 
         emit RevokeConfirmation(msg.sender, _txIndex);
     }
+
          
-    //nuova funzione per aggiungere l'owner
-    function addOwner(address newOwner) public onlyOwner {
-    require(newOwner != address(0), "invalid owner");
-    require(!isOwner[newOwner], "owner already exists");
+     function proposeNewOwner(address _newOwner) public onlyOwner {
+            uint ownerIndex = ownerships.length;
 
-    isOwner[newOwner] = true;
-    owners.push(newOwner);
+        ownerships.push(
+            Ownership({
+                newOwner: _newOwner,
+                addExecuted: false,
+                numConfirmations: 0
+            })
+        );
 
-//aggiungere richiesta conferma altri owner
-
+        emit ProposeNewOwner(msg.sender, ownerIndex, _newOwner);
     }
 
-    function removeOwner(address ownerToRemove) public onlyOwner {
-    require(isOwner[ownerToRemove], "owner not found");
-    require(owners.length > 1, "cannot remove last owner");
+       function confirmNewOwner(
+        uint _ownerIndex
+    )
+        public
+        onlyOwner
+        ownerExists(_ownerIndex)
+        notExecutedAddOwner(_ownerIndex)
+        notConfirmedAddOwner(_ownerIndex)
+    {
+        Ownership storage ownership = ownerships[_ownerIndex];
+        ownership.numConfirmations += 1;
+        IsAddNewOwner[_ownerIndex][msg.sender] = true;
 
-    for (uint256 i = 0; i < owners.length; i++) {
-        if (owners[i] == ownerToRemove) {
+        emit ConfirmNewOwner(msg.sender, _ownerIndex);
+    }
+    
+        function executeAddOwner(
+        uint _ownerIndex,
+        address newOwner
+    ) public onlyOwner ownerExists(_ownerIndex) notExecutedAddOwner(_ownerIndex) {
+        Ownership storage ownership = ownerships[_ownerIndex];
+
+        require(
+            ownership.numConfirmations >= numConfirmationsRequired,
+            "cannot execute tx"
+        );
+
+        ownership.addExecuted = true;
+        isOwner[newOwner] = true;
+        owners.push(newOwner);
+
+
+        emit ExecuteAddOwner(msg.sender, _ownerIndex);
+    }
+
+ function proposeRemoveOwner(address _addressRemove) public onlyOwner {
+        uint removeIndex = delet.length;
+        delet.push(
+            Deleting({
+                addressRemove: _addressRemove,
+                removeExecuted: false,
+                numConfirmations: 0
+            })
+        );
+
+        emit ProposeRemoveOwner(msg.sender, removeIndex, _addressRemove);
+
+    }
+      function confirmeRemoveOwner(
+        uint _removeIndex
+    )
+         public
+          onlyOwner
+        ownerExists(_removeIndex)
+        notExecutedRemoveOwner(_removeIndex)
+        notConfirmedRemoveOwner(_removeIndex)
+    {
+        Deleting storage deleting = delet[_removeIndex];
+        deleting.numConfirmations += 1;
+        isRemoveOwner[_removeIndex][msg.sender] = true;
+
+        emit ConfirmeRemoveOwner(msg.sender, _removeIndex);
+    }
+ 
+function exdecuteRemoveOwner(
+    uint _removeIndex, 
+    address addressRemove) public 
+    onlyOwner 
+    ownerRemoverExists(_removeIndex) 
+    notExecutedRemoveOwner(_removeIndex) {
+        Deleting storage deleting = delet[_removeIndex];
+    
+    require(isOwner[addressRemove], "owner not found");
+    require(owners.length > 1, "cannot remove last owner");
+    require(
+            deleting.numConfirmations >= numConfirmationsRequired,
+            "cannot execute tx"
+        );
+
+        deleting.removeExecuted = true;
+
+           for (uint256 i = 0; i < owners.length; i++) {
+        if (owners[i] == addressRemove) {
             // Rimuove il proprietario dall'array spostando tutti gli elementi successivi a sinistra
             for (uint256 j = i; j < owners.length - 1; j++) {
                 owners[j] = owners[j+1];
@@ -184,11 +332,14 @@ contract MultiSigWallet {
             owners.pop();
             break;
         }
-        //aggiungere richiesta conferma altri owner
+       
+
+    isOwner[addressRemove] = false;
     }
 
-    isOwner[ownerToRemove] = false;
+        emit ExecuteAddOwner(msg.sender, _removeIndex);
     }
+
 
     function getOwners() public view returns (address[] memory) {
         return owners;
@@ -222,3 +373,4 @@ contract MultiSigWallet {
         );
     }
 }
+
