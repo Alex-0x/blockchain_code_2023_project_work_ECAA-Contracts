@@ -47,37 +47,44 @@ contract MultiSigWallet {
         uint numConfirmations;
 
     }
+    
+    event ProposeNewTreshold(address indexed owner, uint indexed tresholdIndex, uint treshold);
+    event ConfirmNewTreshold(address indexed owner, uint indexed tresholdIndex);
+    event ExecuteNewTreshold(address indexed owner, uint indexed tresholdIndex);
 
-    event ConfirmNewTreshold(address indexed owner, uint indexed txIndex);
-    event ExecuteNewTreshold(address indexed owner, uint indexed txIndex);
 
     struct Treshold {
-        uint newNumConfirmations;
-        bytes data;
-        bool executed;
+        uint treshold;
+        bool tresholdExecuted;
         uint numConfirmations;
     }
 
-    event ProposeChangeOwner(address indexed owner, uint indexed txIndex);
-    event ImAmHere(address indexed owner, uint indexed txIndex );
-    event ExcuteChangeOwner(address indexed owner, uint indexed txIndex);
+    event ProposeChangeOwner(address indexed owner, uint indexed rescueIndex, address oldOwner, address indexed newOwner);
+    event ConfirmeChangeOwner(address indexed owner, uint indexed rescueIndex);
+    event ImAmHere(address indexed owner, uint indexed rescueIndex );
+    event ExcuteChangeOwner(address indexed owner, uint indexed rescueIndex);
+    
 
     struct Rescue {
         address oldOwner;
         address newOwner;
-        bytes data;
-        bool executed;
+        bool rescueExecuted;
         uint numConfirmations;
+        bool imHere;
     }
 
     // mapping from tx index => owner => bool
     mapping(uint => mapping(address => bool)) public isConfirmed;
     mapping(uint => mapping(address => bool)) public IsAddNewOwner;
     mapping(uint => mapping(address => bool)) public isRemoveOwner;
+    mapping(uint => mapping(address => bool)) public isTreshold;
+    mapping(uint => mapping(address => bool)) public isRescue;
 
     Transaction[] public transactions;
     Ownership[] public ownerships;
     Deleting[] public delet;
+    Treshold[] public tresholds;
+    Rescue[] public resc;
     
 
 
@@ -85,12 +92,20 @@ contract MultiSigWallet {
         require(isOwner[msg.sender], "not owner");
         _;
     }
+       modifier rescueExists(uint _rescueIndex) {
+        require(_rescueIndex < resc.length, "rescue does not exist" );
+        _;
+    }
+     modifier tresholdExists(uint _tresholdIndex) {
+        require(_tresholdIndex < tresholds.length, "treshold does not exist" );
+        _;
+    }
     modifier ownerExists(uint _ownerIndex) {
         require(_ownerIndex < ownerships.length, "owner does not exist" );
         _;
     }
     modifier ownerRemoverExists(uint _removeIndex) {
-        require(_removeIndex < delet.length, "owner does not exist" );
+        require(_removeIndex < delet.length, "removeOwner does not exist" );
         _;
     }
 
@@ -98,7 +113,15 @@ contract MultiSigWallet {
         require(_txIndex < transactions.length, "tx does not exist");
         _;
     }
-    
+    modifier notExecutedRescue(uint _rescueIndex) {
+        require(!resc[_rescueIndex].rescueExecuted, "rescue already executed");
+        _;
+    }   
+
+    modifier notExecutedTreshold(uint _tresholdIndex) {
+        require(!tresholds[_tresholdIndex].tresholdExecuted, "treshold already executed");
+        _;
+    }    
     modifier notExecutedAddOwner(uint _ownerIndex) {
         require(!ownerships[_ownerIndex].addExecuted, "add owner already executed");
         _;
@@ -113,7 +136,15 @@ contract MultiSigWallet {
         require(!transactions[_txIndex].executed, "tx already executed");
         _;
     }
-    
+      modifier notConfirmedRescue(uint _rescueIndex) {
+        require(!isRescue[_rescueIndex][msg.sender], "rescue already confirmed");
+        _;
+    }
+
+      modifier notConfirmedTreshold(uint _tresholdIndex) {
+        require(!isTreshold[_tresholdIndex][msg.sender], "treshold already confirmed");
+        _;
+    }
 
     modifier notConfirmedAddOwner(uint _ownerIndex) {
         require(!IsAddNewOwner[_ownerIndex][msg.sender], "add owner already confirmed");
@@ -339,6 +370,131 @@ function exdecuteRemoveOwner(
 
         emit ExecuteAddOwner(msg.sender, _removeIndex);
     }
+
+
+     function proposeNewTreshold(uint _treshold) public onlyOwner {
+            uint tresholdIndex = tresholds.length;
+
+        tresholds.push(
+            Treshold({
+                treshold: _treshold,
+                tresholdExecuted: false,
+                numConfirmations: 0
+            })
+        );
+
+        emit ProposeNewTreshold(msg.sender, tresholdIndex, _treshold);
+    }
+
+       function confirmNewTreshold(
+        uint _tresholdIndex
+    )
+        public
+        onlyOwner
+        tresholdExists(_tresholdIndex)
+        notExecutedTreshold(_tresholdIndex)
+        notConfirmedTreshold(_tresholdIndex)
+    {
+        Treshold storage treshold = tresholds[_tresholdIndex];
+        treshold.numConfirmations += 1;
+        isTreshold[_tresholdIndex][msg.sender] = true;
+
+        emit ConfirmNewTreshold(msg.sender, _tresholdIndex);
+    }
+    
+        function executeNewTreshold(
+        uint _tresholdIndex,
+        uint treshold
+    ) public onlyOwner tresholdExists(_tresholdIndex) notExecutedTreshold(_tresholdIndex) {
+        Treshold storage treshold = tresholds[_tresholdIndex];
+
+        require(
+            treshold.numConfirmations >= numConfirmationsRequired,
+            "cannot execute tx"
+        );
+
+        treshold.tresholdExecuted = true;
+
+        
+        emit ExecuteAddOwner(msg.sender, _tresholdIndex);
+    }
+
+
+    function proposeChangeOwner(address _oldOwner, address _newOwner) public onlyOwner {
+            uint rescueIndex = resc.length;
+
+        resc.push(
+            Rescue({
+                oldOwner: _oldOwner,
+                newOwner: _newOwner,
+                rescueExecuted: false,
+                numConfirmations: 0,
+                imHere: false
+            })
+        );
+
+        emit ProposeChangeOwner(msg.sender, rescueIndex ,_oldOwner, _newOwner);
+    }
+
+
+       function confirmeChangeOwner(
+        uint _rescueIndex
+    )
+        public
+        onlyOwner
+        rescueExists(_rescueIndex)
+        notExecutedRescue(_rescueIndex)
+        notConfirmedRescue(_rescueIndex)
+    {
+        Rescue storage rescue = resc[_rescueIndex];
+        rescue.numConfirmations += 1;
+        isRescue[_rescueIndex][msg.sender] = true;
+
+        emit ConfirmeChangeOwner(msg.sender, _rescueIndex);
+    }
+
+       function imAmHere(uint _rescueIndex) public 
+        onlyOwner
+        //onlyNomited
+        rescueExists(_rescueIndex)
+        notExecutedRescue(_rescueIndex)
+        {
+        Rescue storage rescue = resc[_rescueIndex];
+        rescue.imHere = true;
+        isRescue[_rescueIndex][msg.sender] = true;
+
+        emit ImAmHere(msg.sender, _rescueIndex);
+        }
+    
+        function excuteChangeOwner(
+        uint _rescueIndex,
+        address oldOwner,
+        address newOwner
+    ) public onlyOwner rescueExists(_rescueIndex) notExecutedRescue(_rescueIndex) {
+        Rescue storage rescue = resc[_rescueIndex];
+
+        require(
+            rescue.numConfirmations >= numConfirmationsRequired,
+            "cannot execute tx"
+        );
+        require (rescue.imHere == false, "called ImHere function");
+
+        rescue.rescueExecuted = true;
+
+        for (uint256 i = 0; i < owners.length; i++) {
+        if (owners[i] == oldOwner) {
+            // Rimuove il proprietario dall'array spostando tutti gli elementi successivi a sinistra
+            for (uint256 j = i; j < owners.length - 1; j++) {
+                owners[j] = owners[j+1];
+            }
+            owners.pop();
+            owners.push(newOwner);
+            break;
+        }
+        emit ExecuteAddOwner(msg.sender, _rescueIndex);
+    }
+}
+    
 
 
     function getOwners() public view returns (address[] memory) {
