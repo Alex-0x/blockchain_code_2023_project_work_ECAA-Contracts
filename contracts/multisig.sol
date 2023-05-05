@@ -71,6 +71,9 @@ contract MultiSigWallet {
         bool rescueExecuted;
         uint numConfirmations;
         bool imHere;
+        uint256 timeToUnLock;
+        bool lock;
+        bool unlock;
     }
 
     // mapping from tx index => owner => bool
@@ -422,6 +425,9 @@ function exdecuteRemoveOwner(
 
     function proposeChangeOwner(address _oldOwner, address _newOwner) public onlyOwner {
             uint rescueIndex = resc.length;
+        
+       
+    
 
         resc.push(
             Rescue({
@@ -429,12 +435,21 @@ function exdecuteRemoveOwner(
                 newOwner: _newOwner,
                 rescueExecuted: false,
                 numConfirmations: 0,
-                imHere: false
+                imHere: false,
+                lock: true,
+                unlock: false,
+                timeToUnLock: block.timestamp + 2 minutes
+
             })
+            
+            
         );
 
         emit ProposeChangeOwner(msg.sender, rescueIndex ,_oldOwner, _newOwner);
     }
+
+
+
 
 
        function confirmeChangeOwner(
@@ -478,6 +493,16 @@ function exdecuteRemoveOwner(
             "cannot execute tx"
         );
         require (rescue.imHere == false, "called ImHere function");
+        
+        if(block.timestamp >= rescue.timeToUnLock && rescue.lock) {
+            rescue.lock = false;
+            rescue.unlock = true;
+        }
+
+        require(rescue.lock == false && rescue.unlock == true, "tempo non ancora passato");
+        
+
+        
 
         rescue.rescueExecuted = true;
 
@@ -494,7 +519,6 @@ function exdecuteRemoveOwner(
         emit ExecuteAddOwner(msg.sender, _rescueIndex);
     }
 }
-    
 
 
     function getOwners() public view returns (address[] memory) {
