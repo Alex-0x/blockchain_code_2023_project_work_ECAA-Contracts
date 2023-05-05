@@ -18,6 +18,7 @@ contract MultiSigWallet {
     address[] public owners;
     mapping(address => bool) public isOwner;
     uint public numConfirmationsRequired;
+    uint public numTreshold;
 
     struct Transaction {
         address to;
@@ -39,7 +40,8 @@ contract MultiSigWallet {
 
     event ProposeRemoveOwner(address indexed owner, uint indexed removeIndex, address indexed addressRemove);
     event ConfirmeRemoveOwner(address indexed owner, uint indexed removeIndex);
-    event ExdecuteRemoveOwner(address indexed owner, uint indexed removeIndex);
+    event ExcuteRemoveOwner(address indexed owner, uint indexed removeIndex);
+
 
     struct Deleting {
         address addressRemove;
@@ -48,13 +50,13 @@ contract MultiSigWallet {
 
     }
     
-    event ProposeNewTreshold(address indexed owner, uint indexed tresholdIndex, uint treshold);
+    event ProposeNewTreshold(address indexed owner, uint indexed tresholdIndex, uint newNumTreshold);
     event ConfirmNewTreshold(address indexed owner, uint indexed tresholdIndex);
     event ExecuteNewTreshold(address indexed owner, uint indexed tresholdIndex);
 
 
     struct Treshold {
-        uint treshold;
+        uint newNumTreshold;
         bool tresholdExecuted;
         uint numConfirmations;
     }
@@ -165,14 +167,19 @@ contract MultiSigWallet {
         _;
     }
 
-    constructor(address[] memory _owners, uint _numConfirmationsRequired) {
+    constructor(address[] memory _owners, uint _numConfirmationsRequired, uint _numTreshold) {
         require(_owners.length > 0, "owners required");
         require(
             _numConfirmationsRequired > 0 &&
                 _numConfirmationsRequired <= _owners.length,
             "invalid number of required confirmations"
         );
-
+        require(
+            _numTreshold > 0 &&
+                _numTreshold < _owners.length,
+            "invalid number of required treshol confirmations"
+        );
+        
         for (uint i = 0; i < _owners.length; i++) {
             address owner = _owners[i];
 
@@ -184,6 +191,7 @@ contract MultiSigWallet {
         }
 
         numConfirmationsRequired = _numConfirmationsRequired;
+        numTreshold = _numTreshold;
     }
 
     receive() external payable {
@@ -226,8 +234,6 @@ contract MultiSigWallet {
         emit ConfirmTransaction(msg.sender, _txIndex);
     }
 
-    // questa funzione non funziona è da rivedere
-    //usare assembly?
     function executeTransaction(
         uint _txIndex
     ) public onlyOwner txExists(_txIndex) notExecuted(_txIndex) {
@@ -328,8 +334,8 @@ contract MultiSigWallet {
         uint _removeIndex
     )
          public
-          onlyOwner
-        ownerExists(_removeIndex)
+        onlyOwner
+        ownerRemoverExists(_removeIndex)
         notExecutedRemoveOwner(_removeIndex)
         notConfirmedRemoveOwner(_removeIndex)
     {
@@ -340,7 +346,7 @@ contract MultiSigWallet {
         emit ConfirmeRemoveOwner(msg.sender, _removeIndex);
     }
  
-function exdecuteRemoveOwner(
+function excuteRemoveOwner(
     uint _removeIndex, 
     address addressRemove) public 
     onlyOwner 
@@ -351,7 +357,7 @@ function exdecuteRemoveOwner(
     require(isOwner[addressRemove], "owner not found");
     require(owners.length > 1, "cannot remove last owner");
     require(
-            deleting.numConfirmations >= numConfirmationsRequired,
+            deleting.numConfirmations >= numTreshold,
             "cannot execute tx"
         );
 
@@ -371,22 +377,25 @@ function exdecuteRemoveOwner(
     isOwner[addressRemove] = false;
     }
 
-        emit ExecuteAddOwner(msg.sender, _removeIndex);
+        emit ExcuteRemoveOwner(msg.sender, _removeIndex);
     }
 
 
-     function proposeNewTreshold(uint _treshold) public onlyOwner {
+     function proposeNewTreshold(uint _newNumTreshold) public onlyOwner {
             uint tresholdIndex = tresholds.length;
+
+            require(_newNumTreshold > 0 , "treshold minore di uno");
+            require(_newNumTreshold < owners.length, "treshold maggiore o uguale agli owner");
 
         tresholds.push(
             Treshold({
-                treshold: _treshold,
+                newNumTreshold: _newNumTreshold,
                 tresholdExecuted: false,
                 numConfirmations: 0
             })
         );
 
-        emit ProposeNewTreshold(msg.sender, tresholdIndex, _treshold);
+        emit ProposeNewTreshold(msg.sender, tresholdIndex, _newNumTreshold);
     }
 
        function confirmNewTreshold(
@@ -407,7 +416,7 @@ function exdecuteRemoveOwner(
     
         function executeNewTreshold(
         uint _tresholdIndex,
-        uint treshold
+        uint newNumTreshold
     ) public onlyOwner tresholdExists(_tresholdIndex) notExecutedTreshold(_tresholdIndex) {
         Treshold storage treshold = tresholds[_tresholdIndex];
 
@@ -416,18 +425,18 @@ function exdecuteRemoveOwner(
             "cannot execute tx"
         );
 
+        
         treshold.tresholdExecuted = true;
+        newNumTreshold = numTreshold;
 
         
-        emit ExecuteAddOwner(msg.sender, _tresholdIndex);
+        emit ExecuteNewTreshold(msg.sender, _tresholdIndex);
     }
 
 
     function proposeChangeOwner(address _oldOwner, address _newOwner) public onlyOwner {
             uint rescueIndex = resc.length;
-        
-       
-    
+            
 
         resc.push(
             Rescue({
@@ -447,9 +456,6 @@ function exdecuteRemoveOwner(
 
         emit ProposeChangeOwner(msg.sender, rescueIndex ,_oldOwner, _newOwner);
     }
-
-
-
 
 
        function confirmeChangeOwner(
