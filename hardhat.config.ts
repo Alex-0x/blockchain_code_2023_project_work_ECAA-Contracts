@@ -35,8 +35,8 @@ const config: HardhatUserConfig = {
     },
     polygon_mumbai: {
       url: "https://rpc-mumbai.maticvigil.com",
-      accounts: [process.env.PRIVATE_KEY ??""]
-    },
+      accounts: [process.env.PRIVATE_KEY ?? ""]
+    }, 
     sepolia: {
       url: `https://rpc.sepolia.org/`,
       accounts: [process.env.PRIVATE_KEY ?? ""],

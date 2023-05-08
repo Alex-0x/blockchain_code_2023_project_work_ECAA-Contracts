@@ -3,10 +3,10 @@ import { ethers } from "hardhat";
 
 async function main() {
 
-    const PRIVATE_KEY =
+    const PUBLIC_KEY =
         "0xfdB78b2AB4fF548CFa6eF069D994108cAE676765"
     const Test = await ethers.getContractFactory("MultiSigWalletTest");
-    const test = await Test.deploy([PRIVATE_KEY, "0x5B38Da6a701c568545dCfcB03FcB875f56beddC4"], 1, 1);
+    const test = await Test.deploy([PUBLIC_KEY, "0x5B38Da6a701c568545dCfcB03FcB875f56beddC4"], 1, 1);
 
     await test.deployed();
 

@@ -17,7 +17,8 @@ contract MultiSigWalletTest {
     event RevokeConfirmation(address indexed owner, uint indexed txIndex);
     event ExecuteTransaction(address indexed owner, uint indexed txIndex);
 
-    address[] public owners;
+    address[] public owners; 
+    // RIMUOVERE ARRAY OWNERS??
     mapping(address => bool) public isOwner;
     uint public numConfirmationsRequired;
     uint public numTreshold;
@@ -308,6 +309,7 @@ contract MultiSigWalletTest {
         uint _txIndex
     ) public onlyOwner txExists(_txIndex) notExecuted(_txIndex) {
         Transaction storage transaction = transactions[_txIndex];
+       
 
         require(
             transaction.numConfirmations >= numConfirmationsRequired,
@@ -318,7 +320,7 @@ contract MultiSigWalletTest {
 
 
         (bool success, ) = transaction.to.call{value: transaction.value}(
-            ""
+        ""
         );
     
         require(success, "tx failed");
@@ -654,7 +656,6 @@ function proposeApproval(
 
      function proposeTokenTransaction(
         address _to,
-        
         address _tokenAddress,
         uint _value,
         bool isERC20,
