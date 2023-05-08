@@ -15,11 +15,13 @@ contract MultiSigWalletFactory {
 
     function createMultiSigWallet(
         address[] memory _owners,
-        uint _numConfirmationsRequired
+        uint _numConfirmationsRequired,
+        uint _numTreshold
     ) public returns (MultiSigWallet) {
         MultiSigWallet newWallet = new MultiSigWallet(
             _owners,
-            _numConfirmationsRequired
+            _numConfirmationsRequired,
+            _numTreshold
         );
         deployedWallets.push(newWallet);
 
