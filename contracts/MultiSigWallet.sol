@@ -1,17 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.17;
 
-/*
-aggiungere le funzioni per permettere di aggiungere e rimuovere partecipanti al multisig (addOwner, removeOwner),quindi implementare il sistema di 
-votazione da parte dei membri per l aggiunta e la rimozione della nuova persona(vedere sistema votazione transazione).
-
-FUNZIONE CAMBIARE TRESHOLD
-
-implementare per questo multisig l utilizzo di erc20 e erc721 (capire se implementare 1155)
-BISOGNA IMPLEMENTARE INTERFACCIA, DEPOSIT, WITHDRAW E EXECUTION
-
-
-*/
 
 contract MultiSigWallet {
     event Deposit(address indexed sender, uint amount, uint balance);
@@ -29,6 +18,7 @@ contract MultiSigWallet {
     address[] public owners;
     mapping(address => bool) public isOwner;
     uint public numConfirmationsRequired;
+    uint public numTreshold;
 
     struct Transaction {
         address to;
@@ -37,14 +27,89 @@ contract MultiSigWallet {
         bool executed;
         uint numConfirmations;
     }
+    //index per owner
+    event ProposeNewOwner( address indexed owner, uint indexed ownerIndex, address indexed newOwner);
+    event ConfirmNewOwner(address indexed owner, uint indexed ownerIndex);
+    event ExecuteAddOwner(address indexed owner, uint indexed ownerIndex, address indexed newOwner);
+
+    struct Ownership {
+        address newOwner;
+        bool addExecuted;
+        uint numConfirmations;
+    }
+
+    event ProposeRemoveOwner(address indexed owner, uint indexed removeIndex, address indexed addressRemove);
+    event ConfirmeRemoveOwner(address indexed owner, uint indexed removeIndex);
+    event ExcuteRemoveOwner(address indexed owner, uint indexed removeIndex, address indexed addressRemove);
+
+
+    struct Deleting {
+        address addressRemove;
+        bool removeExecuted;
+        uint numConfirmations;
+
+    }
+    
+    event ProposeNewTreshold(address indexed owner, uint indexed tresholdIndex, uint newNumTreshold);
+    event ConfirmNewTreshold(address indexed owner, uint indexed tresholdIndex);
+    event ExecuteNewTreshold(address indexed owner, uint indexed tresholdIndex);
+
+
+    struct Treshold {
+        uint newNumTreshold;
+        bool tresholdExecuted;
+        uint numConfirmations;
+    }
+
+    event ProposeChangeOwner(address indexed owner, uint indexed rescueIndex, address oldOwner, address indexed newOwner);
+    event ConfirmeChangeOwner(address indexed owner, uint indexed rescueIndex);
+    event ImAmHere(address indexed owner, uint indexed rescueIndex );
+    event ExcuteChangeOwner(address indexed owner, uint indexed rescueIndex, address oldOWner, address indexed newOwner);
+    
+
+    struct Rescue {
+        address oldOwner;
+        address newOwner;
+        bool rescueExecuted;
+        uint numConfirmations;
+        bool imHere;
+        uint256 timeToUnLock;
+        bool lock;
+    }
 
     // mapping from tx index => owner => bool
     mapping(uint => mapping(address => bool)) public isConfirmed;
+    mapping(uint => mapping(address => bool)) public IsAddNewOwner;
+    mapping(uint => mapping(address => bool)) public isRemoveOwner;
+    mapping(uint => mapping(address => bool)) public isTreshold;
+    mapping(uint => mapping(address => bool)) public isRescue;
 
     Transaction[] public transactions;
+    Ownership[] public ownerships;
+    Deleting[] public delet;
+    Treshold[] public tresholds;
+    Rescue[] public resc;
+    
+
 
     modifier onlyOwner() {
         require(isOwner[msg.sender], "not owner");
+        _;
+    }
+       modifier rescueExists(uint _rescueIndex) {
+        require(_rescueIndex < resc.length, "rescue does not exist" );
+        _;
+    }
+     modifier tresholdExists(uint _tresholdIndex) {
+        require(_tresholdIndex < tresholds.length, "treshold does not exist" );
+        _;
+    }
+    modifier ownerExists(uint _ownerIndex) {
+        require(_ownerIndex < ownerships.length, "owner does not exist" );
+        _;
+    }
+    modifier ownerRemoverExists(uint _removeIndex) {
+        require(_removeIndex < delet.length, "removeOwner does not exist" );
         _;
     }
 
@@ -52,29 +117,72 @@ contract MultiSigWallet {
         require(_txIndex < transactions.length, "tx does not exist");
         _;
     }
+    modifier notExecutedRescue(uint _rescueIndex) {
+        require(!resc[_rescueIndex].rescueExecuted, "rescue already executed");
+        _;
+    }   
+
+    modifier notExecutedTreshold(uint _tresholdIndex) {
+        require(!tresholds[_tresholdIndex].tresholdExecuted, "treshold already executed");
+        _;
+    }    
+    modifier notExecutedAddOwner(uint _ownerIndex) {
+        require(!ownerships[_ownerIndex].addExecuted, "add owner already executed");
+        _;
+    }
+
+    modifier notExecutedRemoveOwner(uint _removeIndex) {
+        require(!delet[_removeIndex].removeExecuted, "remove owner alrady executed");
+        _;
+    }
 
     modifier notExecuted(uint _txIndex) {
         require(!transactions[_txIndex].executed, "tx already executed");
         _;
     }
+      modifier notConfirmedRescue(uint _rescueIndex) {
+        require(!isRescue[_rescueIndex][msg.sender], "rescue already confirmed");
+        _;
+    }
+
+      modifier notConfirmedTreshold(uint _tresholdIndex) {
+        require(!isTreshold[_tresholdIndex][msg.sender], "treshold already confirmed");
+        _;
+    }
+
+    modifier notConfirmedAddOwner(uint _ownerIndex) {
+        require(!IsAddNewOwner[_ownerIndex][msg.sender], "add owner already confirmed");
+        _;
+    }
+
+     modifier notConfirmedRemoveOwner(uint _removeIndex) {
+        require(!isRemoveOwner[_removeIndex][msg.sender], "Remove owner already confirmed");
+        _;
+    }
+
 
     modifier notConfirmed(uint _txIndex) {
         require(!isConfirmed[_txIndex][msg.sender], "tx already confirmed");
         _;
     }
 
-    constructor(address[] memory _owners, uint _numConfirmationsRequired) {
-        require(_owners.length > 0, "owners required");
+    constructor(address[] memory _owners, uint _numConfirmationsRequired, uint _numTreshold) {
+        require(_owners.length > 0, "at least one owner is required");
         require(
             _numConfirmationsRequired > 0 &&
                 _numConfirmationsRequired <= _owners.length,
             "invalid number of required confirmations"
         );
-
+        require(
+            _numTreshold > 0 &&
+                _numTreshold < _owners.length,
+            "invalid number of required treshold confirmations"
+        );
+        
         for (uint i = 0; i < _owners.length; i++) {
             address owner = _owners[i];
 
-            require(owner != address(0), "invalid owner");
+            require(owner != address(0), "owner cannot be address(0)");
             require(!isOwner[owner], "owner not unique");
 
             isOwner[owner] = true;
@@ -82,6 +190,7 @@ contract MultiSigWallet {
         }
 
         numConfirmationsRequired = _numConfirmationsRequired;
+        numTreshold = _numTreshold;
     }
 
     receive() external payable {
@@ -124,7 +233,6 @@ contract MultiSigWallet {
         emit ConfirmTransaction(msg.sender, _txIndex);
     }
 
-    // questa funzione non funziona è da rivedere PROBLEMA CON I DATA
     function executeTransaction(
         uint _txIndex
     ) public onlyOwner txExists(_txIndex) notExecuted(_txIndex) {
@@ -132,13 +240,13 @@ contract MultiSigWallet {
 
         require(
             transaction.numConfirmations >= numConfirmationsRequired,
-            "cannot execute tx"
+            "number confirmations too low"
         );
 
         transaction.executed = true;
 
         (bool success, ) = transaction.to.call{value: transaction.value}(
-            transaction.data
+            ""
         );
         require(success, "tx failed");
 
@@ -158,6 +266,270 @@ contract MultiSigWallet {
         emit RevokeConfirmation(msg.sender, _txIndex);
     }
 
+         
+     function proposeNewOwner(address _newOwner) public onlyOwner {
+            uint ownerIndex = ownerships.length;
+
+        ownerships.push(
+            Ownership({
+                newOwner: _newOwner,
+                addExecuted: false,
+                numConfirmations: 0
+            })
+        );
+
+        emit ProposeNewOwner(msg.sender, ownerIndex, _newOwner);
+    }
+
+       function confirmNewOwner(
+        uint _ownerIndex
+    )
+        public
+        onlyOwner
+        ownerExists(_ownerIndex)
+        notExecutedAddOwner(_ownerIndex)
+        notConfirmedAddOwner(_ownerIndex)
+    {
+        Ownership storage ownership = ownerships[_ownerIndex];
+        ownership.numConfirmations += 1;
+        IsAddNewOwner[_ownerIndex][msg.sender] = true;
+
+        emit ConfirmNewOwner(msg.sender, _ownerIndex);
+    }
+    
+        function executeAddOwner(
+        uint _ownerIndex,
+        address newOwner
+    ) public onlyOwner ownerExists(_ownerIndex) notExecutedAddOwner(_ownerIndex) {
+        Ownership storage ownership = ownerships[_ownerIndex];
+
+        require(
+            ownership.numConfirmations >= numConfirmationsRequired,
+            "cannot execute tx"
+        );
+
+        ownership.addExecuted = true;
+        isOwner[newOwner] = true;
+        owners.push(newOwner);
+
+
+        emit ExecuteAddOwner(msg.sender, _ownerIndex, newOwner);
+    }
+
+ function proposeRemoveOwner(address _addressRemove) public onlyOwner {
+        uint removeIndex = delet.length;
+        delet.push(
+            Deleting({
+                addressRemove: _addressRemove,
+                removeExecuted: false,
+                numConfirmations: 0
+            })
+        );
+
+        emit ProposeRemoveOwner(msg.sender, removeIndex, _addressRemove);
+
+    }
+      function confirmeRemoveOwner(
+        uint _removeIndex
+    )
+         public
+        onlyOwner
+        ownerRemoverExists(_removeIndex)
+        notExecutedRemoveOwner(_removeIndex)
+        notConfirmedRemoveOwner(_removeIndex)
+    {
+        Deleting storage deleting = delet[_removeIndex];
+        deleting.numConfirmations += 1;
+        isRemoveOwner[_removeIndex][msg.sender] = true;
+
+        emit ConfirmeRemoveOwner(msg.sender, _removeIndex);
+    }
+ 
+function excuteRemoveOwner(
+    uint _removeIndex, 
+    address addressRemove) public 
+    onlyOwner 
+    ownerRemoverExists(_removeIndex) 
+    notExecutedRemoveOwner(_removeIndex) {
+        Deleting storage deleting = delet[_removeIndex];
+    
+    require(isOwner[addressRemove], "owner not found");
+    require(owners.length > 1, "cannot remove last owner");
+    require(
+            deleting.numConfirmations >= numTreshold,
+            "number of confirmations too low"
+        );
+
+        deleting.removeExecuted = true;
+
+           for (uint256 i = 0; i < owners.length; i++) {
+        if (owners[i] == addressRemove) {
+            // Rimuove il proprietario dall'array spostando tutti gli elementi successivi a sinistra
+            for (uint256 j = i; j < owners.length - 1; j++) {
+                owners[j] = owners[j+1];
+            }
+            owners.pop();
+            break;
+        }
+       
+
+    isOwner[addressRemove] = false;
+    }
+
+        emit ExcuteRemoveOwner(msg.sender, _removeIndex, addressRemove);
+    }
+
+
+     function proposeNewTreshold(uint _newNumTreshold) public onlyOwner {
+            uint tresholdIndex = tresholds.length;
+
+            require(_newNumTreshold > 0 , "cannot be 0");
+            require(_newNumTreshold < owners.length, "treshold minore degli owner ");
+
+        tresholds.push(
+            Treshold({
+                newNumTreshold: _newNumTreshold,
+                tresholdExecuted: false,
+                numConfirmations: 0
+            })
+        );
+
+        emit ProposeNewTreshold(msg.sender, tresholdIndex, _newNumTreshold);
+    }
+
+       function confirmNewTreshold(
+        uint _tresholdIndex
+    )
+        public
+        onlyOwner
+        tresholdExists(_tresholdIndex)
+        notExecutedTreshold(_tresholdIndex)
+        notConfirmedTreshold(_tresholdIndex)
+    {
+        Treshold storage treshold = tresholds[_tresholdIndex];
+        treshold.numConfirmations += 1;
+        isTreshold[_tresholdIndex][msg.sender] = true;
+
+        emit ConfirmNewTreshold(msg.sender, _tresholdIndex);
+    }
+    
+        function executeNewTreshold(
+        uint _tresholdIndex
+        //uint newNumTreshold
+    ) public onlyOwner tresholdExists(_tresholdIndex) notExecutedTreshold(_tresholdIndex) {
+        Treshold storage treshold = tresholds[_tresholdIndex];
+
+        require(
+            treshold.numConfirmations >= numConfirmationsRequired,
+            "cannot execute tx"
+        );
+
+        
+        treshold.tresholdExecuted = true;
+        numTreshold = treshold.newNumTreshold;
+
+        
+        emit ExecuteNewTreshold(msg.sender, _tresholdIndex);
+    }
+
+
+    function proposeChangeOwner(address _oldOwner, address _newOwner) public onlyOwner {
+            uint rescueIndex = resc.length;
+
+           require(!isOwner[_newOwner] && _newOwner != address(0), "already owner or address 0");
+            
+
+        resc.push(
+            Rescue({
+                oldOwner: _oldOwner,
+                newOwner: _newOwner,
+                rescueExecuted: false,
+                numConfirmations: 0,
+                imHere: false,
+                lock: true,
+                timeToUnLock: block.timestamp + 2 minutes
+
+            })
+            
+            
+        );
+
+        emit ProposeChangeOwner(msg.sender, rescueIndex ,_oldOwner, _newOwner);
+    }
+
+
+       function confirmeChangeOwner(
+        uint _rescueIndex
+    )
+        public
+        onlyOwner
+        rescueExists(_rescueIndex)
+        notExecutedRescue(_rescueIndex)
+        notConfirmedRescue(_rescueIndex)
+    {
+        Rescue storage rescue = resc[_rescueIndex];
+        rescue.numConfirmations += 1;
+        isRescue[_rescueIndex][msg.sender] = true;
+
+        emit ConfirmeChangeOwner(msg.sender, _rescueIndex);
+    }
+
+       function imAmHere(uint _rescueIndex) public 
+        onlyOwner
+        //onlyNomited
+        rescueExists(_rescueIndex)
+        notExecutedRescue(_rescueIndex)
+        {
+        Rescue storage rescue = resc[_rescueIndex];
+        rescue.imHere = true;
+        isRescue[_rescueIndex][msg.sender] = true;
+
+        emit ImAmHere(msg.sender, _rescueIndex);
+        }
+    
+        function excuteChangeOwner(
+        uint _rescueIndex,
+        address oldOwner,
+        address newOwner
+    ) public onlyOwner rescueExists(_rescueIndex) notExecutedRescue(_rescueIndex) {
+        Rescue storage rescue = resc[_rescueIndex];
+
+        require(
+            rescue.numConfirmations >= numConfirmationsRequired,
+            "cannot execute tx"
+        );
+        require (rescue.imHere == false, "called ImHere function");
+        
+        if(block.timestamp >= rescue.timeToUnLock && rescue.lock) {
+            rescue.lock = false;
+        }
+
+        require(rescue.lock == false, "tempo non ancora passato");
+        
+
+        
+
+        rescue.rescueExecuted = true;
+
+        for (uint256 i = 0; i < owners.length; i++) {
+        if (owners[i] == oldOwner) {
+            // Rimuove il proprietario dall'array spostando tutti gli elementi successivi a sinistra
+            for (uint256 j = i; j < owners.length - 1; j++) {
+                owners[j] = owners[j+1];
+            }
+            owners.pop();
+            owners.push(newOwner);
+            break;
+        }
+        emit ExcuteChangeOwner(msg.sender, _rescueIndex, oldOwner, newOwner);
+    }
+}
+
+
+    function getTimeToUnlock(uint _rescueIndex) public view returns (uint) {
+        Rescue storage rescue = resc[_rescueIndex];
+        return (rescue.timeToUnLock - block.timestamp); 
+    }
     function getOwners() public view returns (address[] memory) {
         return owners;
     }
@@ -166,6 +538,18 @@ contract MultiSigWallet {
         return transactions.length;
     }
 
+    function getOwnershipsCount() public view returns (uint) {
+        return ownerships.length;
+    }
+    function getDeletCount() public view returns (uint) {
+        return delet.length;
+    }
+    function getTresholdsCount() public view returns (uint) {
+        return tresholds.length;
+    }
+    function getRescCount() public view returns (uint) {
+        return resc.length;
+    }
     function getTransaction(
         uint _txIndex
     )
@@ -189,184 +573,89 @@ contract MultiSigWallet {
             transaction.numConfirmations
         );
     }
+    function getOwnerships(
+        uint _ownerIndex
+    )
+        public
+        view
+        returns (
+            address newOwner,
+        bool addExecuted,
+        uint numConfirmations
+        )
+    {
+        Ownership storage ownership = ownerships[_ownerIndex];
 
-    event AddOwner(address indexed owner, uint indexed operationIndex);
-    event ConfirmAddOwner(address indexed owner, uint indexed operationIndex);
-    event ExecuteAddOwner(
-        address indexed owner,
-        address indexed newOwner,
-        uint indexed operationIndex
-    );
-
-    struct AddOwnerOperation {
-        address newOwner;
-        bool executed;
-        uint numConfirmations;
+        return (
+            ownership.newOwner,
+            ownership.addExecuted,
+            ownership.numConfirmations
+        );
     }
+    function getDelet(
+        uint _removeIndex
+    )
+        public
+        view
+        returns (
+            address addressRemove,
+        bool removeExecuted,
+        uint numConfirmations
+        )
+    {
+        Deleting storage deleting = delet[_removeIndex];
 
-    // mapping from operation index => owner => bool
-    mapping(uint => mapping(address => bool)) public isAddOwnerConfirmed;
-
-    AddOwnerOperation[] public addOwnerOperations;
-
-    function submitAddOwner(address _newOwner) public onlyOwner {
-        require(!isOwner[_newOwner], "Address is already an owner");
-
-        uint operationIndex = addOwnerOperations.length;
-
-        addOwnerOperations.push(
-            AddOwnerOperation({
-                newOwner: _newOwner,
-                executed: false,
-                numConfirmations: 0
-            })
+        return (
+            deleting.addressRemove,
+            deleting.removeExecuted,
+            deleting.numConfirmations
         );
-
-        emit AddOwner(_newOwner, operationIndex);
     }
+    function getTreshold(
+        uint _tresholdIndex
+    )
+        public
+        view
+        returns (
+           uint newNumTreshold,
+        bool tresholdExecuted,
+        uint numConfirmations
+        )
+    {
+        Treshold storage treshold = tresholds[_tresholdIndex];
 
-    function confirmAddOwner(uint _operationIndex) public onlyOwner {
-        require(
-            _operationIndex < addOwnerOperations.length,
-            "Operation does not exist"
+        return (
+            treshold.newNumTreshold,
+            treshold.tresholdExecuted,
+            treshold.numConfirmations
         );
-        require(
-            !addOwnerOperations[_operationIndex].executed,
-            "Operation already executed"
-        );
-        require(
-            !isAddOwnerConfirmed[_operationIndex][msg.sender],
-            "Operation already confirmed"
-        );
-
-        AddOwnerOperation storage operation = addOwnerOperations[
-            _operationIndex
-        ];
-        operation.numConfirmations += 1;
-        isAddOwnerConfirmed[_operationIndex][msg.sender] = true;
-
-        emit ConfirmAddOwner(msg.sender, _operationIndex);
     }
+    function getResc(
+        uint _rescueIndex
+    )
+        public
+        view
+        returns (
+           address oldOwner,
+        address newOwner,
+        bool rescueExecuted,
+        uint numConfirmations,
+        bool imHere,
+        uint256 timeToUnLock,
+        bool lock
+        )
+    {
+        Rescue storage rescue = resc[_rescueIndex];
 
-    function executeAddOwner(uint _operationIndex) public onlyOwner {
-        require(
-            _operationIndex < addOwnerOperations.length,
-            "Operation does not exist"
-        );
-
-        AddOwnerOperation storage operation = addOwnerOperations[
-            _operationIndex
-        ];
-
-        require(!operation.executed, "Operation already executed");
-        require(
-            operation.numConfirmations >= numConfirmationsRequired,
-            "Not enough confirmations"
-        );
-
-        operation.executed = true;
-        isOwner[operation.newOwner] = true;
-        owners.push(operation.newOwner);
-
-        emit ExecuteAddOwner(msg.sender, operation.newOwner, _operationIndex);
-    }
-
-    event RemoveOwner(address indexed owner, uint indexed operationIndex);
-    event ConfirmRemoveOwner(
-        address indexed owner,
-        uint indexed operationIndex
-    );
-    event ExecuteRemoveOwner(
-        address indexed owner,
-        address indexed removedOwner,
-        uint indexed operationIndex
-    );
-
-    struct RemoveOwnerOperation {
-        address ownerToRemove;
-        bool executed;
-        uint numConfirmations;
-    }
-
-    // mapping from operation index => owner => bool
-    mapping(uint => mapping(address => bool)) public isRemoveOwnerConfirmed;
-
-    RemoveOwnerOperation[] public removeOwnerOperations;
-
-    function submitRemoveOwner(address _ownerToRemove) public onlyOwner {
-        require(isOwner[_ownerToRemove], "Address is not an owner");
-        require(
-            owners.length > numConfirmationsRequired,
-            "Cannot remove owner when there are not enough owners left"
-        );
-
-        uint operationIndex = removeOwnerOperations.length;
-
-        removeOwnerOperations.push(
-            RemoveOwnerOperation({
-                ownerToRemove: _ownerToRemove,
-                executed: false,
-                numConfirmations: 0
-            })
-        );
-
-        emit RemoveOwner(_ownerToRemove, operationIndex);
-    }
-
-    function confirmRemoveOwner(uint _operationIndex) public onlyOwner {
-        require(
-            _operationIndex < removeOwnerOperations.length,
-            "Operation does not exist"
-        );
-        require(
-            !removeOwnerOperations[_operationIndex].executed,
-            "Operation already executed"
-        );
-        require(
-            !isRemoveOwnerConfirmed[_operationIndex][msg.sender],
-            "Operation already confirmed"
-        );
-
-        RemoveOwnerOperation storage operation = removeOwnerOperations[
-            _operationIndex
-        ];
-        operation.numConfirmations += 1;
-        isRemoveOwnerConfirmed[_operationIndex][msg.sender] = true;
-
-        emit ConfirmRemoveOwner(msg.sender, _operationIndex);
-    }
-
-    function executeRemoveOwner(uint _operationIndex) public onlyOwner {
-        require(
-            _operationIndex < removeOwnerOperations.length,
-            "Operation does not exist"
-        );
-
-        RemoveOwnerOperation storage operation = removeOwnerOperations[
-            _operationIndex
-        ];
-
-        require(!operation.executed, "Operation already executed");
-        require(
-            operation.numConfirmations >= numConfirmationsRequired,
-            "Not enough confirmations"
-        );
-
-        operation.executed = true;
-        isOwner[operation.ownerToRemove] = false;
-        // putting ownerToRemove at end of array and then removing it
-        for (uint i = 0; i < owners.length; i++) {
-            if (owners[i] == operation.ownerToRemove) {
-                owners[i] = owners[owners.length - 1];
-                owners.pop();
-                break;
-            }
-        }
-
-        emit ExecuteRemoveOwner(
-            msg.sender,
-            operation.ownerToRemove,
-            _operationIndex
+        return (
+            rescue.oldOwner,
+            rescue.newOwner,
+            rescue.rescueExecuted,
+            rescue.numConfirmations,
+            rescue.imHere,
+            rescue.timeToUnLock,
+            rescue.lock
         );
     }
 }
+
