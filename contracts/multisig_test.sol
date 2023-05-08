@@ -4,8 +4,10 @@ pragma solidity ^0.8.17;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 
-contract MultiSigWalletTest {
+contract MultiSigWallet {
+  
     event Deposit(address indexed sender, uint amount, uint balance);
+   
     event SubmitTransaction(
         address indexed owner,
         uint indexed txIndex,
@@ -17,8 +19,7 @@ contract MultiSigWalletTest {
     event RevokeConfirmation(address indexed owner, uint indexed txIndex);
     event ExecuteTransaction(address indexed owner, uint indexed txIndex);
 
-    address[] public owners; 
-    // RIMUOVERE ARRAY OWNERS??
+    address[] public owners;
     mapping(address => bool) public isOwner;
     uint public numConfirmationsRequired;
     uint public numTreshold;
@@ -96,27 +97,19 @@ contract MultiSigWalletTest {
         uint indexed tokenIndex,
         address tokenAddress,
         address to,
-        uint value,
-        bool isERC20,
-        bool isERC721,
-        uint tokenId
+        uint value
     );
 
     event ConfirmTokenTransaction(address indexed owner, uint indexed txIndex);
     event RevokeTokenConfirmation(address indexed owner, uint indexed txIndex);
-    event ExecuteTokenTransaction(address indexed owner, uint indexed txIndex, bool isERC20, bool isERC721, uint tokenId);
+    event ExecuteTokenTransaction(address indexed owner, uint indexed txIndex);
 
      struct TokenTransaction {
         address tokenAddress;
         address to;
         uint value;
         bool tokenExecuted;
-        uint numConfirmations;
-        bool isERC20;
-        bool isERC721;
-        uint tokenId;
-        
-        
+        uint numConfirmations;   
     }
 
 
@@ -240,24 +233,23 @@ contract MultiSigWalletTest {
     }
 
     constructor(address[] memory _owners, uint _numConfirmationsRequired, uint _numTreshold) {
-        require(_owners.length > 0, "owners required");
+        require(_owners.length > 1, "at least 2 owners required");
         require(
             _numConfirmationsRequired > 0 &&
                 _numConfirmationsRequired <= _owners.length,
-            "invalid number of required confirmations"
+            "invalid number of required confirmations number"
         );
         require(
             _numTreshold > 0 &&
                 _numTreshold < _owners.length,
-            "invalid number of required treshol confirmations"
+            "invalid number of required treshold confirmations number"
         );
         
         for (uint i = 0; i < _owners.length; i++) {
             address owner = _owners[i];
 
             require(owner != address(0), "invalid owner");
-            require(!isOwner[owner], "owner not unique");
-
+            
             isOwner[owner] = true;
             owners.push(owner);
         }
@@ -272,8 +264,8 @@ contract MultiSigWalletTest {
 
     function submitTransaction(
         address _to,
-
         uint _value
+        //data??
     ) public onlyOwner {
         uint _txIndex = transactions.length;
 
@@ -309,7 +301,6 @@ contract MultiSigWalletTest {
         uint _txIndex
     ) public onlyOwner txExists(_txIndex) notExecuted(_txIndex) {
         Transaction storage transaction = transactions[_txIndex];
-       
 
         require(
             transaction.numConfirmations >= numConfirmationsRequired,
@@ -320,7 +311,7 @@ contract MultiSigWalletTest {
 
 
         (bool success, ) = transaction.to.call{value: transaction.value}(
-        ""
+            ""
         );
     
         require(success, "tx failed");
@@ -373,8 +364,8 @@ contract MultiSigWalletTest {
     }
     
         function executeAddOwner(
-        uint _ownerIndex,
-        address newOwner
+        uint _ownerIndex
+       
     ) public onlyOwner ownerExists(_ownerIndex) notExecutedAddOwner(_ownerIndex) {
         Ownership storage ownership = ownerships[_ownerIndex];
 
@@ -384,15 +375,15 @@ contract MultiSigWalletTest {
         );
 
         ownership.addExecuted = true;
-        isOwner[newOwner] = true;
-        owners.push(newOwner);
+        isOwner[ownership.newOwner] = true;
+        owners.push(ownership.newOwner);
 
 
-        emit ExecuteAddOwner(msg.sender, _ownerIndex, newOwner);
+        emit ExecuteAddOwner(msg.sender, _ownerIndex, ownership.newOwner);
     }
 
  function proposeRemoveOwner(address _addressRemove) public onlyOwner {
-        uint removeIndex = delet.length;
+        uint _removeIndex = delet.length;
         delet.push(
             Deleting({
                 addressRemove: _addressRemove,
@@ -401,7 +392,7 @@ contract MultiSigWalletTest {
             })
         );
 
-        emit ProposeRemoveOwner(msg.sender, removeIndex, _addressRemove);
+        emit ProposeRemoveOwner(msg.sender, _removeIndex, _addressRemove);
 
     }
       function confirmeRemoveOwner(
@@ -421,14 +412,14 @@ contract MultiSigWalletTest {
     }
  
 function excuteRemoveOwner(
-    uint _removeIndex, 
-    address addressRemove) public 
+    uint _removeIndex
+   ) public 
     onlyOwner 
     ownerRemoverExists(_removeIndex) 
     notExecutedRemoveOwner(_removeIndex) {
         Deleting storage deleting = delet[_removeIndex];
     
-    require(isOwner[addressRemove], "owner not found");
+    require(isOwner[deleting.addressRemove], "owner not found");
     require(owners.length > 1, "cannot remove last owner");
     require(
             deleting.numConfirmations >= numTreshold,
@@ -438,7 +429,7 @@ function excuteRemoveOwner(
         deleting.removeExecuted = true;
 
            for (uint256 i = 0; i < owners.length; i++) {
-        if (owners[i] == addressRemove) {
+        if (owners[i] == deleting.addressRemove) {
             // Rimuove il proprietario dall'array spostando tutti gli elementi successivi a sinistra
             for (uint256 j = i; j < owners.length - 1; j++) {
                 owners[j] = owners[j+1];
@@ -448,15 +439,15 @@ function excuteRemoveOwner(
         }
        
 
-    isOwner[addressRemove] = false;
+    isOwner[deleting.addressRemove] = false;
     }
 
-        emit ExcuteRemoveOwner(msg.sender, _removeIndex, addressRemove);
+        emit ExcuteRemoveOwner(msg.sender, _removeIndex, deleting.addressRemove);
     }
 
 
      function proposeNewTreshold(uint _newNumTreshold) public onlyOwner {
-            uint tresholdIndex = tresholds.length;
+            uint _tresholdIndex = tresholds.length;
 
             require(_newNumTreshold > 0 , "cannot be 0");
             require(_newNumTreshold < owners.length, "treshold minore degli owner ");
@@ -469,7 +460,7 @@ function excuteRemoveOwner(
             })
         );
 
-        emit ProposeNewTreshold(msg.sender, tresholdIndex, _newNumTreshold);
+        emit ProposeNewTreshold(msg.sender, _tresholdIndex, _newNumTreshold);
     }
 
        function confirmNewTreshold(
@@ -490,7 +481,7 @@ function excuteRemoveOwner(
     
         function executeNewTreshold(
         uint _tresholdIndex
-        
+        // uint newNumTreshold
     ) public onlyOwner tresholdExists(_tresholdIndex) notExecutedTreshold(_tresholdIndex) {
         Treshold storage treshold = tresholds[_tresholdIndex];
 
@@ -509,10 +500,10 @@ function excuteRemoveOwner(
 
 
     function proposeChangeOwner(address _oldOwner, address _newOwner) public onlyOwner {
-            uint rescueIndex = resc.length;
+            uint _rescueIndex = resc.length;
 
            require(!isOwner[_newOwner] && _newOwner != address(0), "already owner or address 0");
-            
+           require(isOwner[_oldOwner], "the old owner is not  actually an owner");
 
         resc.push(
             Rescue({
@@ -529,7 +520,7 @@ function excuteRemoveOwner(
             
         );
 
-        emit ProposeChangeOwner(msg.sender, rescueIndex ,_oldOwner, _newOwner);
+        emit ProposeChangeOwner(msg.sender, _rescueIndex ,_oldOwner, _newOwner);
     }
 
 
@@ -563,9 +554,8 @@ function excuteRemoveOwner(
         }
     
         function excuteChangeOwner(
-        uint _rescueIndex,
-        address oldOwner,
-        address newOwner
+        uint _rescueIndex
+        
     ) public onlyOwner rescueExists(_rescueIndex) notExecutedRescue(_rescueIndex) {
         Rescue storage rescue = resc[_rescueIndex];
 
@@ -587,23 +577,25 @@ function excuteRemoveOwner(
         rescue.rescueExecuted = true;
 
         for (uint256 i = 0; i < owners.length; i++) {
-        if (owners[i] == oldOwner) {
+        if (owners[i] == rescue.oldOwner) {
             // Rimuove il proprietario dall'array spostando tutti gli elementi successivi a sinistra
             for (uint256 j = i; j < owners.length - 1; j++) {
                 owners[j] = owners[j+1];
             }
             owners.pop();
-            owners.push(newOwner);
+            owners.push(rescue.newOwner);
             break;
         }
+        isOwner[rescue.newOwner]= true;
+        isOwner[rescue.oldOwner]=false;
         
-        emit ExcuteChangeOwner(msg.sender, _rescueIndex, oldOwner, newOwner);
+        emit ExcuteChangeOwner(msg.sender, _rescueIndex, rescue.oldOwner, rescue.newOwner);
     }
 }
 function proposeApproval(
         address _tokenAddress,
         uint _value
-       
+        //uint _approvalIndex
     ) public onlyOwner {
         uint _approvalIndex = approvals.length;
 
@@ -656,43 +648,23 @@ function proposeApproval(
 
      function proposeTokenTransaction(
         address _to,
-        address _tokenAddress,
-        uint _value,
-        bool isERC20,
-        bool isERC721,
-        uint _tokenId
+         address _tokenAddress,
+        uint _value
     ) public onlyOwner {
-        uint _tokenIndex = tokens.length;
+        uint _tokenindex = tokens.length;
+        
 
-if(isERC20) {
         tokens.push(
             TokenTransaction({
                 to: _to,
                 tokenAddress: _tokenAddress,
                 value: _value,
                 tokenExecuted: false,
-                numConfirmations: 0,
-                isERC20: true,
-                isERC721: false,
-                tokenId: _tokenId
+                numConfirmations: 0
             })
         );
-} else {
-        tokens.push(
-            TokenTransaction({
-                to: _to,
-                tokenAddress: _tokenAddress,
-                value: _value,
-                tokenExecuted: false,
-                numConfirmations: 0,
-                isERC20: false,
-                isERC721: true,
-                tokenId: _tokenId
-            })
-        );
-}
 
-        emit ProposeTokenTransaction(msg.sender, _tokenIndex, _to,_tokenAddress, _value,isERC20, isERC721, _tokenId);
+        emit ProposeTokenTransaction(msg.sender, _tokenindex, _to,_tokenAddress, _value);
     }
 
     function confirmTokenTransaction(
@@ -712,10 +684,7 @@ if(isERC20) {
     }
 
     function executeTokenTransaction(
-        uint _tokenIndex,
-        bool isERC20,
-        bool isERC721,
-        uint tokenId
+        uint _tokenIndex
     ) public onlyOwner tokenTransactionExists(_tokenIndex) notExecutedTokenTransaction(_tokenIndex) {
         TokenTransaction storage tokenTransaction = tokens[_tokenIndex];
 
@@ -726,16 +695,11 @@ if(isERC20) {
 
         tokenTransaction.tokenExecuted = true;
 
-    if (tokenTransaction.isERC20) {
         
         IERC20(tokenTransaction.tokenAddress).transfer(tokenTransaction.to, tokenTransaction.value);
-    } else if (tokenTransaction.isERC721) {
-        
-        IERC721(tokenTransaction.tokenAddress).safeTransferFrom(address(this), tokenTransaction.to, tokenTransaction.tokenId);
-    }
 
 
-        emit ExecuteTokenTransaction(msg.sender, _tokenIndex, isERC20, isERC721, tokenId);
+        emit ExecuteTokenTransaction(msg.sender, _tokenIndex);
     }
 
     function revokeTokenConfirmation(
@@ -764,25 +728,149 @@ if(isERC20) {
         return transactions.length;
     }
 
+        function getOwnershipsCount() public view returns (uint) {
+        return ownerships.length;
+    }
+    function getDeletCount() public view returns (uint) {
+        return delet.length;
+    }
+    function getTresholdsCount() public view returns (uint) {
+        return tresholds.length;
+    }
+    function getRescCount() public view returns (uint) {
+        return resc.length;
+    }
+    function getTokenTxCount() public view returns (uint) {
+        return tokens.length;
+    }
     function getTransaction(
         uint _txIndex
     )
         public
         view
         returns (
-        address to,
-        uint value,
-        bool executed,
-        uint numConfirmations
+            address to,
+            uint value,
+
+            bool executed,
+            uint numConfirmations
         )
     {
         Transaction storage transaction = transactions[_txIndex];
 
         return (
-        transaction.to,
-        transaction.value,
-        transaction.executed,
-        transaction.numConfirmations
+            transaction.to,
+            transaction.value,
+            
+            transaction.executed,
+            transaction.numConfirmations
+        );
+    }
+    function getOwnerships(
+        uint _ownerIndex
+    )
+        public
+        view
+        returns (
+            address newOwner,
+        bool addExecuted,
+        uint numConfirmations
+        )
+    {
+        Ownership storage ownership = ownerships[_ownerIndex];
+
+        return (
+            ownership.newOwner,
+            ownership.addExecuted,
+            ownership.numConfirmations
+        );
+    }
+    function getDelet(
+        uint _removeIndex
+    )
+        public
+        view
+        returns (
+            address addressRemove,
+        bool removeExecuted,
+        uint numConfirmations
+        )
+    {
+        Deleting storage deleting = delet[_removeIndex];
+
+        return (
+            deleting.addressRemove,
+            deleting.removeExecuted,
+            deleting.numConfirmations
+        );
+    }
+    function getTreshold(
+        uint _tresholdIndex
+    )
+        public
+        view
+        returns (
+           uint newNumTreshold,
+        bool tresholdExecuted,
+        uint numConfirmations
+        )
+    {
+        Treshold storage treshold = tresholds[_tresholdIndex];
+
+        return (
+            treshold.newNumTreshold,
+            treshold.tresholdExecuted,
+            treshold.numConfirmations
+        );
+    }
+    function getResc(
+        uint _rescueIndex
+    )
+        public
+        view
+        returns (
+           address oldOwner,
+        address newOwner,
+        bool rescueExecuted,
+        uint numConfirmations,
+        bool imHere,
+        uint256 timeToUnLock,
+        bool lock
+        )
+    {
+        Rescue storage rescue = resc[_rescueIndex];
+
+        return (
+            rescue.oldOwner,
+            rescue.newOwner,
+            rescue.rescueExecuted,
+            rescue.numConfirmations,
+            rescue.imHere,
+            rescue.timeToUnLock,
+            rescue.lock
+        );
+    }
+    function getTokenTx(
+        uint _tokenTransactionIndex
+    )
+        public
+        view
+        returns (
+         address tokenAddress,
+        address to,
+        uint value,
+        bool tokenExecuted,
+        uint numConfirmations
+        )
+    {
+        TokenTransaction storage tokenTransaction = tokens[_tokenTransactionIndex];
+
+        return (
+         tokenTransaction.tokenAddress,
+         tokenTransaction.to,
+         tokenTransaction.value,
+         tokenTransaction.tokenExecuted,
+         tokenTransaction.numConfirmations 
         );
     }
 }
