@@ -592,57 +592,56 @@ function excuteRemoveOwner(
         emit ExcuteChangeOwner(msg.sender, _rescueIndex, rescue.oldOwner, rescue.newOwner);
     }
 }
-function proposeApproval(
-        address _tokenAddress,
-        uint _value
-        //uint _approvalIndex
-    ) public onlyOwner {
-        uint _approvalIndex = approvals.length;
+// function proposeApproval(
+//         address _tokenAddress,
+//         uint _value
+//         ) public onlyOwner {
+//         uint _approvalIndex = approvals.length;
 
-        approvals.push(
-            Approvation({
-                tokenAddress: _tokenAddress,
-                value: _value,
-                approveExecuted: false,
-                numConfirmations: 0
-            })
-        );
+//         approvals.push(
+//             Approvation({
+//                 tokenAddress: _tokenAddress,
+//                 value: _value,
+//                 approveExecuted: false,
+//                 numConfirmations: 0
+//             })
+//         );
 
-        emit ProposeApproval(msg.sender, _approvalIndex, _tokenAddress, _value);
-    }
+//         emit ProposeApproval(msg.sender, _approvalIndex, _tokenAddress, _value);
+//     }
 
-    function confirmeApproval(
-        uint _approvalIndex
-    )
-        public
-        onlyOwner
-        approvalExists(_approvalIndex)
-        notExecutedApproval(_approvalIndex)
-        notConfirmeApproval(_approvalIndex)
-    {
-        Approvation storage approvation = approvals[_approvalIndex];
-        approvation.numConfirmations += 1;
-        isApprove[_approvalIndex][msg.sender] = true;
+//     function confirmeApproval(
+//         uint _approvalIndex
+//     )
+//         public
+//         onlyOwner
+//         approvalExists(_approvalIndex)
+//         notExecutedApproval(_approvalIndex)
+//         notConfirmeApproval(_approvalIndex)
+//     {
+//         Approvation storage approvation = approvals[_approvalIndex];
+//         approvation.numConfirmations += 1;
+//         isApprove[_approvalIndex][msg.sender] = true;
 
-        emit ConfirmeApproval(msg.sender, _approvalIndex);
-    }
+//         emit ConfirmeApproval(msg.sender, _approvalIndex);
+//     }
 
-    function executeApproval(
-        uint _approvalIndex,
-        address _tokenAddress,
-        uint value
-    ) public onlyOwner approvalExists(_approvalIndex) notExecutedApproval(_approvalIndex) {
-        Approvation storage approvation = approvals[_approvalIndex];
+//     function executeApproval(
+//         uint _approvalIndex,
+//         address _tokenAddress,
+//         uint value
+//     ) public onlyOwner approvalExists(_approvalIndex) notExecutedApproval(_approvalIndex) {
+//         Approvation storage approvation = approvals[_approvalIndex];
 
-        require(
-            approvation.numConfirmations >= numConfirmationsRequired,
-            "number confirmations too low"
-        );
+//         require(
+//             approvation.numConfirmations >= numConfirmationsRequired,
+//             "number confirmations too low"
+//         );
 
-        approvation.approveExecuted = true;
+//         approvation.approveExecuted = true;
 
-        emit ExecuteApproval(msg.sender, _approvalIndex, _tokenAddress, value);
-    }
+//         emit ExecuteApproval(msg.sender, _approvalIndex, _tokenAddress, value);
+//     }
 
     //tokenTransaction
 
