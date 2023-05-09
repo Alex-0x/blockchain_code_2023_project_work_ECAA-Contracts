@@ -376,6 +376,8 @@ modifier notConfirmedNFTTransaction(uint _NFTIndex) {
      function proposeNewOwner(address _newOwner) public onlyOwner {
             uint ownerIndex = ownerships.length;
 
+            require(!isOwner[_newOwner] && _newOwner != address(0), "already owner or address 0");
+          
         ownerships.push(
             Ownership({
                 newOwner: _newOwner,
