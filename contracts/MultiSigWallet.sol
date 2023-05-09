@@ -88,17 +88,7 @@ contract MultiSigWallet {
         uint256 timeToUnLock;
         bool lock;
     }
-    event ProposeApproval(address indexed owner, uint indexed approvalIndex, address indexed tokenId, uint value);
-    event ConfirmeApproval(address indexed owner, uint indexed approvalIndex);
-    event ExecuteApproval(address indexed owner, uint indexed approvalIndex, address indexed tokenId, uint value);
-
-    // struct Approvation {
-    //     address tokenAddress;
-    //     uint value;
-    //     bool approveExecuted;
-    //     uint numConfirmations;
-        
-    // }
+    
     event ProposeTokenTransaction(
         address indexed owner,
         uint indexed tokenIndex,
@@ -146,7 +136,6 @@ contract MultiSigWallet {
     mapping(uint => mapping(address => bool)) public isRemoveOwner;
     mapping(uint => mapping(address => bool)) public isTreshold;
     mapping(uint => mapping(address => bool)) public isRescue;
-    //mapping(uint => mapping(address => bool)) public isApprove;
     mapping(uint => mapping(address => bool)) public isToken;
     mapping(uint => mapping(address => bool)) public isNFT;
 
@@ -155,7 +144,6 @@ contract MultiSigWallet {
     Deleting[] public delet;
     Treshold[] public tresholds;
     Rescue[] public resc;
-    //Approvation[] public approvals;
     TokenTransaction[] public tokens;
     NFTTransaction[] public nfts;
     
@@ -165,10 +153,7 @@ contract MultiSigWallet {
         require(isOwner[msg.sender], "not owner");
         _;
     }
-    // modifier approvalExists(uint _approvalIndex) {
-    //     require(_approvalIndex < approvals.length, "approval does not exist" );
-    //     _;
-    // }
+  
     modifier NFTTransactionExists(uint _NFTIndex) {
         require(_NFTIndex < nfts.length, "NFT transaction does not exist" );
         _;
@@ -207,10 +192,7 @@ modifier notExecutedNFTTransaction(uint _NFTIndex) {
         require(!tokens[_tokenIndex].tokenExecuted, "token transaction already executed");
         _;
     } 
-    // modifier notExecutedApproval(uint _approvalIndex) {
-    //     require(!approvals[_approvalIndex].approveExecuted, "approval already executed");
-    //     _;
-    // } 
+   
     modifier notExecutedRescue(uint _rescueIndex) {
         require(!resc[_rescueIndex].rescueExecuted, "rescue already executed");
         _;
@@ -234,41 +216,38 @@ modifier notExecutedNFTTransaction(uint _NFTIndex) {
         require(!transactions[_txIndex].executed, "tx already executed");
         _;
     }
-modifier notConfirmedNFTTransaction(uint _NFTIndex) {
-        require(!isNFT[_NFTIndex][msg.sender], "nft transaction already confirmed");
+    modifier notConfirmedNFTTransaction(uint _NFTIndex) {
+        require(!isNFT[_NFTIndex][msg.sender], "nft transaction already confirmed by this owner");
         _;
     }
      modifier notConfirmeTokenTransaction(uint _tokenIndex) {
-        require(!isToken[_tokenIndex][msg.sender], "token transaction already confirmed");
+        require(!isToken[_tokenIndex][msg.sender], "token transaction already confirmed by this owner");
         _;
     }
-    // modifier notConfirmeApproval(uint _approvalIndex) {
-    //     require(!isApprove[_approvalIndex][msg.sender], "approval already confirmed");
-    //     _;
-    // }
+
       modifier notConfirmedRescue(uint _rescueIndex) {
-        require(!isRescue[_rescueIndex][msg.sender], "rescue already confirmed");
+        require(!isRescue[_rescueIndex][msg.sender], "rescue already confirmed by this owner");
         _;
     }
 
       modifier notConfirmedTreshold(uint _tresholdIndex) {
-        require(!isTreshold[_tresholdIndex][msg.sender], "treshold already confirmed");
+        require(!isTreshold[_tresholdIndex][msg.sender], "treshold already confirmed by this owner");
         _;
     }
 
     modifier notConfirmedAddOwner(uint _ownerIndex) {
-        require(!IsAddNewOwner[_ownerIndex][msg.sender], "add owner already confirmed");
+        require(!IsAddNewOwner[_ownerIndex][msg.sender], "add owner already confirmed by this owner");
         _;
     }
 
      modifier notConfirmedRemoveOwner(uint _removeIndex) {
-        require(!isRemoveOwner[_removeIndex][msg.sender], "Remove owner already confirmed");
+        require(!isRemoveOwner[_removeIndex][msg.sender], "Remove owner already confirmed by this owner");
         _;
     }
 
 
     modifier notConfirmed(uint _txIndex) {
-        require(!isConfirmed[_txIndex][msg.sender], "tx already confirmed");
+        require(!isConfirmed[_txIndex][msg.sender], "tx already confirmed by this owner");
         _;
     }
 
@@ -584,18 +563,17 @@ function excuteRemoveOwner(
 
        function imAmHere(uint _rescueIndex) public 
         onlyOwner
-        //onlyNomited
         rescueExists(_rescueIndex)
         notExecutedRescue(_rescueIndex)
         {
         Rescue storage rescue = resc[_rescueIndex];
+        require(rescue.timeToUnLock - block.timestamp >0, "Time to block execution has expired");
         rescue.imHere = true;
         isRescue[_rescueIndex][msg.sender] = true;
-
         emit ImAmHere(msg.sender, _rescueIndex);
         }
     
-        function excuteChangeOwner(
+        function executeChangeOwner(
         uint _rescueIndex
         
     ) public onlyOwner rescueExists(_rescueIndex) notExecutedRescue(_rescueIndex) {
@@ -603,7 +581,7 @@ function excuteRemoveOwner(
 
         require(
             rescue.numConfirmations >= numConfirmationsRequired,
-            "cannot execute tx"
+            "number confirmations too low"
         );
         require (rescue.imHere == false, "called ImHere function");
         
@@ -634,58 +612,6 @@ function excuteRemoveOwner(
         emit ExcuteChangeOwner(msg.sender, _rescueIndex, rescue.oldOwner, rescue.newOwner);
     }
 }
-// function proposeApproval(
-//         address _tokenAddress,
-//         uint _value
-//         ) public onlyOwner {
-//         uint _approvalIndex = approvals.length;
-
-//         approvals.push(
-//             Approvation({
-//                 tokenAddress: _tokenAddress,
-//                 value: _value,
-//                 approveExecuted: false,
-//                 numConfirmations: 0
-//             })
-//         );
-
-//         emit ProposeApproval(msg.sender, _approvalIndex, _tokenAddress, _value);
-//     }
-
-//     function confirmeApproval(
-//         uint _approvalIndex
-//     )
-//         public
-//         onlyOwner
-//         approvalExists(_approvalIndex)
-//         notExecutedApproval(_approvalIndex)
-//         notConfirmeApproval(_approvalIndex)
-//     {
-//         Approvation storage approvation = approvals[_approvalIndex];
-//         approvation.numConfirmations += 1;
-//         isApprove[_approvalIndex][msg.sender] = true;
-
-//         emit ConfirmeApproval(msg.sender, _approvalIndex);
-//     }
-
-//     function executeApproval(
-//         uint _approvalIndex,
-//         address _tokenAddress,
-//         uint value
-//     ) public onlyOwner approvalExists(_approvalIndex) notExecutedApproval(_approvalIndex) {
-//         Approvation storage approvation = approvals[_approvalIndex];
-
-//         require(
-//             approvation.numConfirmations >= numConfirmationsRequired,
-//             "number confirmations too low"
-//         );
-
-//         approvation.approveExecuted = true;
-
-//         emit ExecuteApproval(msg.sender, _approvalIndex, _tokenAddress, value);
-//     }
-
-    //tokenTransaction
 
      function proposeTokenTransaction(
         address _to,
@@ -828,7 +754,8 @@ function excuteRemoveOwner(
 
     function getTimeToUnlock(uint _rescueIndex) public view returns (uint) {
         Rescue storage rescue = resc[_rescueIndex];
-        return (rescue.timeToUnLock - block.timestamp); 
+        uint _timeToUnlock = rescue.timeToUnLock - block.timestamp;
+        return _timeToUnlock > 0 ? _timeToUnlock : 0;
     }
     function getOwners() public view returns (address[] memory) {
         return owners;
