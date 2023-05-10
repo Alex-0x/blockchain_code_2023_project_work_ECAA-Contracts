@@ -5,818 +5,692 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 
-
 contract MultiSigWallet is Initializable {
-
-    function onERC721Received(address, address, uint256, bytes calldata) external pure returns (bytes4) {
-        
+    function onERC721Received(
+        address,
+        address,
+        uint256,
+        bytes calldata
+    ) external pure returns (bytes4) {
         return this.onERC721Received.selector;
     }
 
-    
+    enum ProposalType {
+        Transaction,
+        NewOwner,
+        RemoveOwner,
+        ChangeThreshold,
+        ChangeOwner,
+        TokenTransaction,
+        NFTTransaction
+    }
+
+    struct Proposal {
+        uint index;
+        bool executed;
+        uint numConfirmations;
+        ProposalType proposalType;
+        bytes proposalData;
+    }
+
+    Proposal[] public proposals;
+    // mapping from tx index => owner => bool
+    mapping(uint => mapping(address => bool)) public isConfirmed;
+    address[] public owners;
+    mapping(address => bool) public isOwner;
+    uint public numConfirmationsRequired; // TODO non dobbiamo far modificare anche questo?
+    uint public numThreshold;
+
+    /*
+     **********
+     * EVENTS
+     **********
+     */
+
+    // GENERIC EVENTS
     event Deposit(address indexed sender, uint amount, uint balance);
-   
-    event SubmitTransaction(
+    event ConfirmProposal(address indexed owner, uint indexed txIndex);
+    event RevokeConfirmation(address indexed owner, uint indexed txIndex);
+
+    // TRANSACTION EVENTS
+    event ProposeTransaction(
         address indexed owner,
-        uint indexed txIndex,
+        uint indexed proposalIndex,
         address indexed to,
         uint value
     );
+    event ExecuteTransaction(address indexed owner, uint indexed proposalIndex);
 
-    event ConfirmTransaction(address indexed owner, uint indexed txIndex);
-    event RevokeConfirmation(address indexed owner, uint indexed txIndex);
-    event ExecuteTransaction(address indexed owner, uint indexed txIndex);
+    // NEW OWNER EVENTS
+    event ProposeNewOwner(
+        address indexed owner,
+        uint indexed proposalIndex,
+        address indexed newOwner
+    );
+    event ExecuteNewOwner(
+        address indexed owner,
+        uint indexed proposalIndex,
+        address indexed newOwner
+    );
 
-    address[] public owners;
-    mapping(address => bool) public isOwner;
-    uint public numConfirmationsRequired;
-    uint public numTreshold;
+    // REMOVE OWNER EVENTS
+    event ProposeRemoveOwner(
+        address indexed owner,
+        uint indexed proposalIndex,
+        address indexed addressToRemove
+    );
+    event ExecuteRemoveOwner(
+        address indexed owner,
+        uint indexed proposalIndex,
+        address indexed addressToRemove
+    );
 
-    struct Transaction {
-        address to;
-        uint value;
-        bool executed;
-        uint numConfirmations;
-        
-        
-    }
-    //index per owner
-    event ProposeNewOwner( address indexed owner, uint indexed ownerIndex, address indexed newOwner);
-    event ConfirmNewOwner(address indexed owner, uint indexed ownerIndex);
-    event ExecuteAddOwner(address indexed owner, uint indexed ownerIndex, address indexed newOwner);
+    // CHANGE Threshold EVENTS
+    event ProposeChangeThreshold(
+        address indexed owner,
+        uint indexed proposalIndex,
+        uint newNumThreshold
+    );
+    event ExecuteChangeThreshold(
+        address indexed owner,
+        uint indexed proposalIndex,
+        uint newNumThreshold
+    );
 
-    struct Ownership {
-        address newOwner;
-        bool addExecuted;
-        uint numConfirmations;
-    }
+    // CHANGE OWNER EVENTS
+    event ProposeChangeOwner(
+        address indexed owner,
+        uint indexed proposalIndex,
+        address oldOwner,
+        address indexed newOwner
+    );
+    event ImAmHere(address indexed owner, uint indexed proposalIndex);
+    event ExecuteChangeOwner(
+        address indexed owner,
+        uint indexed proposalIndex,
+        address oldOwner,
+        address indexed newOwner
+    );
 
-    event ProposeRemoveOwner(address indexed owner, uint indexed removeIndex, address indexed addressRemove);
-    event ConfirmeRemoveOwner(address indexed owner, uint indexed removeIndex);
-    event ExcuteRemoveOwner(address indexed owner, uint indexed removeIndex, address indexed addressRemove);
-
-
-    struct Deleting {
-        address addressRemove;
-        bool removeExecuted;
-        uint numConfirmations;
-
-    }
-    
-    event ProposeNewTreshold(address indexed owner, uint indexed tresholdIndex, uint newNumTreshold);
-    event ConfirmNewTreshold(address indexed owner, uint indexed tresholdIndex);
-    event ExecuteNewTreshold(address indexed owner, uint indexed tresholdIndex);
-
-
-    struct Treshold {
-        uint newNumTreshold;
-        bool tresholdExecuted;
-        uint numConfirmations;
-    }
-
-    event ProposeChangeOwner(address indexed owner, uint indexed rescueIndex, address oldOwner, address indexed newOwner);
-    event ConfirmeChangeOwner(address indexed owner, uint indexed rescueIndex);
-    event ImAmHere(address indexed owner, uint indexed rescueIndex );
-    event ExcuteChangeOwner(address indexed owner, uint indexed rescueIndex, address oldOWner, address indexed newOwner);
-    
-
-    struct Rescue {
-        address oldOwner;
-        address newOwner;
-        bool rescueExecuted;
-        uint numConfirmations;
-        bool imHere;
-        uint256 timeToUnLock;
-        bool lock;
-    }
-    
+    // TOKEN TRANSACTION EVENTS
     event ProposeTokenTransaction(
         address indexed owner,
-        uint indexed tokenIndex,
+        uint indexed proposalIndex,
         address tokenAddress,
         address to,
         uint value
     );
-
-    event ConfirmTokenTransaction(address indexed owner, uint indexed txIndex);
-    event RevokeTokenConfirmation(address indexed owner, uint indexed txIndex);
-    event ExecuteTokenTransaction(address indexed owner, uint indexed txIndex);
-
-     struct TokenTransaction {
-        address tokenAddress;
-        address to;
-        uint value;
-        bool tokenExecuted;
-        uint numConfirmations;   
-    }
-
-     event ProposeNFTTransaction(
+    event ExecuteTokenTransaction(
         address indexed owner,
-        uint indexed NFTIndex,
+        uint indexed proposalIndex
+    );
+
+    // NFT TRANSACTION EVENTS
+    event ProposeNFTTransaction(
+        address indexed owner,
+        uint indexed proposalIndex,
         address NFTAddress,
         address to,
         uint value
     );
+    event ExecuteNFTTransaction(
+        address indexed owner,
+        uint indexed proposalIndex
+    );
 
-    event ConfirmNFTTransaction(address indexed owner, uint indexed txIndex);
-    event RevokeNFTConfirmation(address indexed owner, uint indexed txIndex);
-    event ExecuteNFTTransaction(address indexed owner, uint indexed txIndex);
-
-     struct NFTTransaction {
-        address NFTAddress;
-        address to;
-        uint NFTid;
-        bool NFTExecuted;
-        uint numConfirmations;   
-    }
-
-
-    // mapping from tx index => owner => bool
-    mapping(uint => mapping(address => bool)) public isConfirmed;
-    mapping(uint => mapping(address => bool)) public IsAddNewOwner;
-    mapping(uint => mapping(address => bool)) public isRemoveOwner;
-    mapping(uint => mapping(address => bool)) public isTreshold;
-    mapping(uint => mapping(address => bool)) public isRescue;
-    mapping(uint => mapping(address => bool)) public isToken;
-    mapping(uint => mapping(address => bool)) public isNFT;
-
-    Transaction[] public transactions;
-    Ownership[] public ownerships;
-    Deleting[] public delet;
-    Treshold[] public tresholds;
-    Rescue[] public resc;
-    TokenTransaction[] public tokens;
-    NFTTransaction[] public nfts;
-    
-
+    /*
+     **********
+     * MODIFIER
+     **********
+     */
 
     modifier onlyOwner() {
-        require(isOwner[msg.sender], "not owner");
-        _;
-    }
-  
-    modifier NFTTransactionExists(uint _NFTIndex) {
-        require(_NFTIndex < nfts.length, "NFT transaction does not exist" );
-        _;
-    }
-    modifier tokenTransactionExists(uint _tokenIndex) {
-        require(_tokenIndex < tokens.length, "token transaction does not exist" );
-        _;
-    }
-       modifier rescueExists(uint _rescueIndex) {
-        require(_rescueIndex < resc.length, "rescue does not exist" );
-        _;
-    }
-     modifier tresholdExists(uint _tresholdIndex) {
-        require(_tresholdIndex < tresholds.length, "treshold does not exist" );
-        _;
-    }
-    modifier ownerExists(uint _ownerIndex) {
-        require(_ownerIndex < ownerships.length, "owner does not exist" );
-        _;
-    }
-    modifier ownerRemoverExists(uint _removeIndex) {
-        require(_removeIndex < delet.length, "removeOwner does not exist" );
+        require(isOwner[msg.sender], "Must be an owner");
         _;
     }
 
-    modifier txExists(uint _txIndex) {
-        require(_txIndex < transactions.length, "tx does not exist");
-        _;
-    }
-modifier notExecutedNFTTransaction(uint _NFTIndex) {
-        require(!nfts[_NFTIndex].NFTExecuted, "nft transaction already executed");
-        _;
-    } 
-
-    modifier notExecutedTokenTransaction(uint _tokenIndex) {
-        require(!tokens[_tokenIndex].tokenExecuted, "token transaction already executed");
-        _;
-    } 
-   
-    modifier notExecutedRescue(uint _rescueIndex) {
-        require(!resc[_rescueIndex].rescueExecuted, "rescue already executed");
-        _;
-    }   
-
-    modifier notExecutedTreshold(uint _tresholdIndex) {
-        require(!tresholds[_tresholdIndex].tresholdExecuted, "treshold already executed");
-        _;
-    }    
-    modifier notExecutedAddOwner(uint _ownerIndex) {
-        require(!ownerships[_ownerIndex].addExecuted, "add owner already executed");
+    modifier proposalExists(uint _proposalIndex) {
+        require(_proposalIndex < proposals.length, "Proposal does not exist");
         _;
     }
 
-    modifier notExecutedRemoveOwner(uint _removeIndex) {
-        require(!delet[_removeIndex].removeExecuted, "remove alrady executed");
+    modifier proposalNotExecuted(uint _proposalIndex) {
+        require(
+            !proposals[_proposalIndex].executed,
+            "Proposal already executed"
+        );
         _;
     }
 
-    modifier notExecuted(uint _txIndex) {
-        require(!transactions[_txIndex].executed, "tx already executed");
-        _;
-    }
-    modifier notConfirmedNFTTransaction(uint _NFTIndex) {
-        require(!isNFT[_NFTIndex][msg.sender], "nft transaction already confirmed by this owner");
-        _;
-    }
-     modifier notConfirmeTokenTransaction(uint _tokenIndex) {
-        require(!isToken[_tokenIndex][msg.sender], "token transaction already confirmed by this owner");
+    modifier proposalNotConfirmed(uint _proposalIndex) {
+        require(
+            !isConfirmed[_proposalIndex][msg.sender],
+            "Proposal already confirmed by this owner"
+        );
         _;
     }
 
-      modifier notConfirmedRescue(uint _rescueIndex) {
-        require(!isRescue[_rescueIndex][msg.sender], "rescue already confirmed by this owner");
-        _;
-    }
-
-      modifier notConfirmedTreshold(uint _tresholdIndex) {
-        require(!isTreshold[_tresholdIndex][msg.sender], "treshold already confirmed by this owner");
-        _;
-    }
-
-    modifier notConfirmedAddOwner(uint _ownerIndex) {
-        require(!IsAddNewOwner[_ownerIndex][msg.sender], "add owner already confirmed by this owner");
-        _;
-    }
-
-     modifier notConfirmedRemoveOwner(uint _removeIndex) {
-        require(!isRemoveOwner[_removeIndex][msg.sender], "Remove owner already confirmed by this owner");
-        _;
-    }
-
-
-    modifier notConfirmed(uint _txIndex) {
-        require(!isConfirmed[_txIndex][msg.sender], "tx already confirmed by this owner");
-        _;
-    }
-
-    function initialize(address[] memory _owners, uint _numConfirmationsRequired, uint _numTreshold) initializer external {
-        
+    function initialize(
+        address[] memory _owners,
+        uint _numConfirmationsRequired,
+        uint _numThreshold
+    ) external initializer {
         require(
             _numConfirmationsRequired > 0 &&
                 _numConfirmationsRequired <= _owners.length,
             "invalid number of required confirmations number"
         );
         require(
-            _numTreshold > 0 &&
-                _numTreshold < _owners.length,
-            "invalid number of required treshold confirmations number"
+            _numThreshold > 0 && _numThreshold < _owners.length,
+            "invalid number of required threshold confirmations number"
         );
-        
+
         for (uint i = 0; i < _owners.length; i++) {
             address owner = _owners[i];
 
             require(owner != address(0), "invalid owner");
-            
+
             isOwner[owner] = true;
             owners.push(owner);
         }
 
         numConfirmationsRequired = _numConfirmationsRequired;
-        numTreshold = _numTreshold;
+        numThreshold = _numThreshold;
     }
+
+    /*
+     **********
+     * GENERIC FUNCTIONS
+     **********
+     */
 
     receive() external payable {
         emit Deposit(msg.sender, msg.value, address(this).balance);
     }
 
-    function submitTransaction(
-        address _to,
-        uint _value
-        //data??
-    ) public onlyOwner {
-        uint _txIndex = transactions.length;
-
-        transactions.push(
-            Transaction({
-                to: _to,
-                value: _value,
-                executed: false,
-                numConfirmations: 0
-            })
-        );
-
-        emit SubmitTransaction(msg.sender, _txIndex, _to, _value);
-    }
-
-    function confirmTransaction(
+    function confirmProposal(
         uint _txIndex
     )
         public
         onlyOwner
-        txExists(_txIndex)
-        notExecuted(_txIndex)
-        notConfirmed(_txIndex)
+        proposalExists(_txIndex)
+        proposalNotExecuted(_txIndex)
+        proposalNotConfirmed(_txIndex)
     {
-        Transaction storage transaction = transactions[_txIndex];
-        transaction.numConfirmations += 1;
+        Proposal storage proposal = proposals[_txIndex];
+        proposal.numConfirmations += 1;
         isConfirmed[_txIndex][msg.sender] = true;
 
-        emit ConfirmTransaction(msg.sender, _txIndex);
-    }
-
-    function executeTransaction(
-        uint _txIndex
-    ) public onlyOwner txExists(_txIndex) notExecuted(_txIndex) {
-        Transaction storage transaction = transactions[_txIndex];
-
-        require(
-            transaction.numConfirmations >= numConfirmationsRequired,
-            "number confirmations too low"
-        );
-
-        transaction.executed = true;
-
-
-        (bool success, ) = transaction.to.call{value: transaction.value}(
-            ""
-        );
-    
-        require(success, "tx failed");
-
-        emit ExecuteTransaction(msg.sender, _txIndex);
+        emit ConfirmProposal(msg.sender, _txIndex);
     }
 
     function revokeConfirmation(
         uint _txIndex
-    ) public onlyOwner txExists(_txIndex) notExecuted(_txIndex) {
-        Transaction storage transaction = transactions[_txIndex];
+    ) public onlyOwner proposalExists(_txIndex) proposalNotExecuted(_txIndex) {
+        Proposal storage proposal = proposals[_txIndex];
 
-        require(isConfirmed[_txIndex][msg.sender], "tx not confirmed");
+        require(
+            isConfirmed[_txIndex][msg.sender],
+            "Proposal not confirmed by this owner"
+        );
 
-        transaction.numConfirmations -= 1;
+        proposal.numConfirmations -= 1;
         isConfirmed[_txIndex][msg.sender] = false;
 
         emit RevokeConfirmation(msg.sender, _txIndex);
     }
 
-         
-     function proposeNewOwner(address _newOwner) public onlyOwner {
-            uint ownerIndex = ownerships.length;
+    function executeProposal(
+        uint _txIndex
+    ) public onlyOwner proposalExists(_txIndex) proposalNotExecuted(_txIndex) {
+        Proposal storage proposal = proposals[_txIndex];
 
-            require(!isOwner[_newOwner] && _newOwner != address(0), "already owner or address 0");
-          
-        ownerships.push(
-            Ownership({
-                newOwner: _newOwner,
-                addExecuted: false,
-                numConfirmations: 0
-            })
-        );
+        proposal.executed = true;
 
-        emit ProposeNewOwner(msg.sender, ownerIndex, _newOwner);
-    }
-
-       function confirmNewOwner(
-        uint _ownerIndex
-    )
-        public
-        onlyOwner
-        ownerExists(_ownerIndex)
-        notExecutedAddOwner(_ownerIndex)
-        notConfirmedAddOwner(_ownerIndex)
-    {
-        Ownership storage ownership = ownerships[_ownerIndex];
-        ownership.numConfirmations += 1;
-        IsAddNewOwner[_ownerIndex][msg.sender] = true;
-
-        emit ConfirmNewOwner(msg.sender, _ownerIndex);
-    }
-    
-        function executeAddOwner(
-        uint _ownerIndex
-       
-    ) public onlyOwner ownerExists(_ownerIndex) notExecutedAddOwner(_ownerIndex) {
-        Ownership storage ownership = ownerships[_ownerIndex];
-
-        require(
-            ownership.numConfirmations >= numConfirmationsRequired,
-            "cannot execute tx"
-        );
-
-        ownership.addExecuted = true;
-        isOwner[ownership.newOwner] = true;
-        owners.push(ownership.newOwner);
-
-
-        emit ExecuteAddOwner(msg.sender, _ownerIndex, ownership.newOwner);
-    }
-
- function proposeRemoveOwner(address _addressRemove) public onlyOwner {
-        uint _removeIndex = delet.length;
-        delet.push(
-            Deleting({
-                addressRemove: _addressRemove,
-                removeExecuted: false,
-                numConfirmations: 0
-            })
-        );
-
-        emit ProposeRemoveOwner(msg.sender, _removeIndex, _addressRemove);
-
-    }
-      function confirmeRemoveOwner(
-        uint _removeIndex
-    )
-         public
-        onlyOwner
-        ownerRemoverExists(_removeIndex)
-        notExecutedRemoveOwner(_removeIndex)
-        notConfirmedRemoveOwner(_removeIndex)
-    {
-        Deleting storage deleting = delet[_removeIndex];
-        deleting.numConfirmations += 1;
-        isRemoveOwner[_removeIndex][msg.sender] = true;
-
-        emit ConfirmeRemoveOwner(msg.sender, _removeIndex);
-    }
- 
-function excuteRemoveOwner(
-    uint _removeIndex
-   ) public 
-    onlyOwner 
-    ownerRemoverExists(_removeIndex) 
-    notExecutedRemoveOwner(_removeIndex) {
-        Deleting storage deleting = delet[_removeIndex];
-    
-    require(isOwner[deleting.addressRemove], "owner not found");
-    require(owners.length > 1, "cannot remove last owner");
-    require(
-            deleting.numConfirmations >= numTreshold,
-            "number of confirmations too low"
-        );
-
-        deleting.removeExecuted = true;
-
-           for (uint256 i = 0; i < owners.length; i++) {
-        if (owners[i] == deleting.addressRemove) {
-            // Rimuove il proprietario dall'array spostando tutti gli elementi successivi a sinistra
-            for (uint256 j = i; j < owners.length - 1; j++) {
-                owners[j] = owners[j+1];
-            }
-            owners.pop();
-            break;
+        if (proposal.proposalType == ProposalType.Transaction) {
+            _executeTransaction(proposal);
+        } else if (proposal.proposalType == ProposalType.NewOwner) {
+            _executeNewOwner(proposal);
+        } else if (proposal.proposalType == ProposalType.RemoveOwner) {
+            _executeRemoveOwner(proposal);
+        } else if (proposal.proposalType == ProposalType.ChangeThreshold) {
+            _executeChangeThreshold(proposal);
+        } else if (proposal.proposalType == ProposalType.ChangeOwner) {
+            _executeChangeOwner(proposal);
+        } else if (proposal.proposalType == ProposalType.TokenTransaction) {
+            _executeTokenTransaction(proposal);
+        } else if (proposal.proposalType == ProposalType.NFTTransaction) {
+            _executeNFTTransaction(proposal);
         }
-       
-
-    isOwner[deleting.addressRemove] = false;
     }
 
-        emit ExcuteRemoveOwner(msg.sender, _removeIndex, deleting.addressRemove);
-    }
+    /*
+     **********
+     * SPECIFIC FUNCTIONS
+     **********
+     */
 
-
-     function proposeNewTreshold(uint _newNumTreshold) public onlyOwner {
-            uint _tresholdIndex = tresholds.length;
-
-            require(_newNumTreshold > 0 , "cannot be 0");
-            require(_newNumTreshold < owners.length, "treshold minore degli owner ");
-
-        tresholds.push(
-            Treshold({
-                newNumTreshold: _newNumTreshold,
-                tresholdExecuted: false,
-                numConfirmations: 0
-            })
-        );
-
-        emit ProposeNewTreshold(msg.sender, _tresholdIndex, _newNumTreshold);
-    }
-
-       function confirmNewTreshold(
-        uint _tresholdIndex
+    /**
+     * Transactions
+     */
+    function proposeTransaction(
+        address _to,
+        uint _value
     )
         public
+        //data??
         onlyOwner
-        tresholdExists(_tresholdIndex)
-        notExecutedTreshold(_tresholdIndex)
-        notConfirmedTreshold(_tresholdIndex)
     {
-        Treshold storage treshold = tresholds[_tresholdIndex];
-        treshold.numConfirmations += 1;
-        isTreshold[_tresholdIndex][msg.sender] = true;
-
-        emit ConfirmNewTreshold(msg.sender, _tresholdIndex);
-    }
-    
-        function executeNewTreshold(
-        uint _tresholdIndex
-        // uint newNumTreshold
-    ) public onlyOwner tresholdExists(_tresholdIndex) notExecutedTreshold(_tresholdIndex) {
-        Treshold storage treshold = tresholds[_tresholdIndex];
-
-        require(
-            treshold.numConfirmations >= numConfirmationsRequired,
-            "cannot execute tx"
-        );
-
-        
-        treshold.tresholdExecuted = true;
-        numTreshold = treshold.newNumTreshold;
-
-        
-        emit ExecuteNewTreshold(msg.sender, _tresholdIndex);
-    }
-
-
-    function proposeChangeOwner(address _oldOwner, address _newOwner) public onlyOwner {
-            uint _rescueIndex = resc.length;
-
-           require(!isOwner[_newOwner] && _newOwner != address(0), "already owner or address 0");
-           require(isOwner[_oldOwner], "the old owner is not  actually an owner");
-
-        resc.push(
-            Rescue({
-                oldOwner: _oldOwner,
-                newOwner: _newOwner,
-                rescueExecuted: false,
+        uint _proposalIndex = proposals.length;
+        proposals.push(
+            Proposal({
+                index: _proposalIndex,
+                executed: false,
                 numConfirmations: 0,
-                imHere: false,
-                lock: true,
-                timeToUnLock: block.timestamp + 2 minutes
-
+                proposalType: ProposalType.Transaction,
+                proposalData: abi.encode(_to, _value)
             })
-            
-            
         );
 
-        emit ProposeChangeOwner(msg.sender, _rescueIndex ,_oldOwner, _newOwner);
+        emit ProposeTransaction(msg.sender, _proposalIndex, _to, _value);
     }
 
-
-       function confirmeChangeOwner(
-        uint _rescueIndex
-    )
-        public
-        onlyOwner
-        rescueExists(_rescueIndex)
-        notExecutedRescue(_rescueIndex)
-        notConfirmedRescue(_rescueIndex)
-    {
-        Rescue storage rescue = resc[_rescueIndex];
-        rescue.numConfirmations += 1;
-        isRescue[_rescueIndex][msg.sender] = true;
-
-        emit ConfirmeChangeOwner(msg.sender, _rescueIndex);
-    }
-
-       function imAmHere(uint _rescueIndex) public 
-        onlyOwner
-        rescueExists(_rescueIndex)
-        notExecutedRescue(_rescueIndex)
-        {
-        Rescue storage rescue = resc[_rescueIndex];
-        require(rescue.timeToUnLock - block.timestamp >0, "Time to block execution has expired");
-        rescue.imHere = true;
-        isRescue[_rescueIndex][msg.sender] = true;
-        emit ImAmHere(msg.sender, _rescueIndex);
-        }
-    
-        function executeChangeOwner(
-        uint _rescueIndex
-        
-    ) public onlyOwner rescueExists(_rescueIndex) notExecutedRescue(_rescueIndex) {
-        Rescue storage rescue = resc[_rescueIndex];
-
+    function _executeTransaction(Proposal storage proposal) internal {
         require(
-            rescue.numConfirmations >= numConfirmationsRequired,
-            "number confirmations too low"
+            proposal.numConfirmations >= numConfirmationsRequired,
+            "Number of confirmations too low"
         );
-        require (rescue.imHere == false, "called ImHere function");
-        
-        if(block.timestamp >= rescue.timeToUnLock && rescue.lock) {
-            rescue.lock = false;
-        }
 
-        require(rescue.lock == false, "tempo non ancora passato");
-        
+        (address _to, uint _value) = abi.decode(
+            proposal.proposalData,
+            (address, uint)
+        );
 
-        
+        (bool success, ) = _to.call{value: _value}("");
+        require(success, "tx failed");
 
-        rescue.rescueExecuted = true;
+        emit ExecuteTransaction(msg.sender, proposal.index);
+    }
+
+    /**
+     * Add Owner
+     */
+    function proposeNewOwner(address _newOwner) public onlyOwner {
+        require(!isOwner[_newOwner], "User is already an owner");
+        require(_newOwner != address(0), "New owner can't be zero address");
+
+        uint _proposalIndex = proposals.length;
+        proposals.push(
+            Proposal({
+                index: _proposalIndex,
+                executed: false,
+                numConfirmations: 0,
+                proposalType: ProposalType.NewOwner,
+                proposalData: abi.encode(_newOwner)
+            })
+        );
+
+        emit ProposeNewOwner(msg.sender, _proposalIndex, _newOwner);
+    }
+
+    function _executeNewOwner(Proposal storage proposal) internal {
+        require(
+            proposal.numConfirmations >= numConfirmationsRequired,
+            "Number of confirmations too low"
+        );
+
+        address _newOwner = abi.decode(proposal.proposalData, (address));
+
+        isOwner[_newOwner] = true;
+        owners.push(_newOwner);
+
+        emit ExecuteNewOwner(msg.sender, proposal.index, _newOwner);
+    }
+
+    /**
+     * Remove Owner
+     */
+    function proposeRemoveOwner(address _addressToRemove) public onlyOwner {
+        require(isOwner[_addressToRemove], "User is not an owner");
+
+        uint _proposalIndex = proposals.length;
+        proposals.push(
+            Proposal({
+                index: _proposalIndex,
+                executed: false,
+                numConfirmations: 0,
+                proposalType: ProposalType.RemoveOwner,
+                proposalData: abi.encode(_addressToRemove)
+            })
+        );
+
+        emit ProposeRemoveOwner(msg.sender, _proposalIndex, _addressToRemove);
+    }
+
+    function _executeRemoveOwner(Proposal storage proposal) internal {
+        require(
+            proposal.numConfirmations >= numThreshold,
+            "Number of confirmations too low"
+        );
+        require(owners.length > 1, "At least one owner must remain");
+
+        address _addressToRemove = abi.decode(proposal.proposalData, (address));
 
         for (uint256 i = 0; i < owners.length; i++) {
-        if (owners[i] == rescue.oldOwner) {
-            // Rimuove il proprietario dall'array spostando tutti gli elementi successivi a sinistra
-            for (uint256 j = i; j < owners.length - 1; j++) {
-                owners[j] = owners[j+1];
+            if (owners[i] == _addressToRemove) {
+                // Rimuove il proprietario dall'array spostando tutti gli elementi successivi a sinistra
+                for (uint256 j = i; j < owners.length - 1; j++) {
+                    owners[j] = owners[j + 1];
+                }
+                owners.pop();
+                break;
             }
-            owners.pop();
-            owners.push(rescue.newOwner);
-            break;
         }
-        isOwner[rescue.newOwner]= true;
-        isOwner[rescue.oldOwner]=false;
-        
-        emit ExcuteChangeOwner(msg.sender, _rescueIndex, rescue.oldOwner, rescue.newOwner);
-    }
-}
 
-     function proposeTokenTransaction(
+        isOwner[_addressToRemove] = false;
+
+        emit ExecuteRemoveOwner(msg.sender, proposal.index, _addressToRemove);
+    }
+
+    /**
+     * Change Threshold
+     */
+    function proposeChangeThreshold(uint _newThreshold) public onlyOwner {
+        require(_newThreshold > 0, "Threshold must be greater than 0");
+        require(
+            _newThreshold < owners.length,
+            "Threshold must be lower than number of owners"
+        );
+
+        uint _proposalIndex = proposals.length;
+        proposals.push(
+            Proposal({
+                index: _proposalIndex,
+                executed: false,
+                numConfirmations: 0,
+                proposalType: ProposalType.ChangeThreshold,
+                proposalData: abi.encode(_newThreshold)
+            })
+        );
+
+        emit ProposeChangeThreshold(msg.sender, _proposalIndex, _newThreshold);
+    }
+
+    function _executeChangeThreshold(Proposal storage proposal) internal {
+        require(
+            proposal.numConfirmations >= numConfirmationsRequired,
+            "Number of confirmations too low"
+        );
+
+        uint _newThreshold = abi.decode(proposal.proposalData, (uint));
+        numThreshold = _newThreshold;
+
+        emit ExecuteChangeThreshold(msg.sender, proposal.index, _newThreshold);
+    }
+
+    /**
+     * Token Transaction
+     */
+    function proposeTokenTransaction(
         address _to,
-         address _tokenAddress,
+        address _tokenAddress,
         uint _value
     ) public onlyOwner {
-        uint _tokenindex = tokens.length;
-        
-
-        tokens.push(
-            TokenTransaction({
-                to: _to,
-                tokenAddress: _tokenAddress,
-                value: _value,
-                tokenExecuted: false,
-                numConfirmations: 0
+        uint _proposalIndex = proposals.length;
+        proposals.push(
+            Proposal({
+                index: _proposalIndex,
+                executed: false,
+                numConfirmations: 0,
+                proposalType: ProposalType.TokenTransaction,
+                proposalData: abi.encode(_to, _tokenAddress, _value)
             })
         );
 
-        emit ProposeTokenTransaction(msg.sender, _tokenindex, _to,_tokenAddress, _value);
+        emit ProposeTokenTransaction(
+            msg.sender,
+            _proposalIndex,
+            _to,
+            _tokenAddress,
+            _value
+        );
     }
 
-    function confirmTokenTransaction(
-        uint _tokenIndex
-    )
-        public
-        onlyOwner
-        tokenTransactionExists(_tokenIndex)
-        notExecutedTokenTransaction(_tokenIndex)
-        notConfirmeTokenTransaction(_tokenIndex)
-    {
-        TokenTransaction storage tokenTransaction = tokens[_tokenIndex];
-        tokenTransaction.numConfirmations += 1;
-        isToken[_tokenIndex][msg.sender] = true;
-
-        emit ConfirmTokenTransaction(msg.sender, _tokenIndex);
-    }
-
-    function executeTokenTransaction(
-        uint _tokenIndex
-    ) public onlyOwner tokenTransactionExists(_tokenIndex) notExecutedTokenTransaction(_tokenIndex) {
-        TokenTransaction storage tokenTransaction = tokens[_tokenIndex];
-
+    function _executeTokenTransaction(Proposal storage proposal) internal {
         require(
-            tokenTransaction.numConfirmations >= numConfirmationsRequired,
-            "number confirmations too low"
+            proposal.numConfirmations >= numConfirmationsRequired,
+            "Number of confirmations too low"
         );
 
-        tokenTransaction.tokenExecuted = true;
+        (address _to, address _tokenAddress, uint _value) = abi.decode(
+            proposal.proposalData,
+            (address, address, uint)
+        );
 
-        
-        IERC20(tokenTransaction.tokenAddress).transfer(tokenTransaction.to, tokenTransaction.value);
+        IERC20(_tokenAddress).transfer(_to, _value);
 
-
-        emit ExecuteTokenTransaction(msg.sender, _tokenIndex);
+        emit ExecuteTokenTransaction(msg.sender, proposal.index);
     }
 
-    function revokeTokenConfirmation(
-        uint _tokenIndex
-    ) public onlyOwner tokenTransactionExists(_tokenIndex) notExecutedTokenTransaction(_tokenIndex) {
-        TokenTransaction storage tokenTransaction = tokens[_tokenIndex];
-
-        require(isToken[_tokenIndex][msg.sender], "token transaction not confirmed");
-
-        tokenTransaction.numConfirmations -= 1;
-        isToken[_tokenIndex][msg.sender] = false;
-
-        emit RevokeTokenConfirmation(msg.sender, _tokenIndex);
-    }
-
+    /**
+     * NFT Transfer
+     */
     function proposeNFTTransaction(
         address _to,
-         address _NFTAddress,
+        address _NFTAddress,
         uint _NFTid
     ) public onlyOwner {
-        uint _NFTindex = nfts.length;
-        
-
-        nfts.push(
-            NFTTransaction({
-                to: _to,
-                NFTAddress: _NFTAddress,
-                NFTid: _NFTid,
-                NFTExecuted: false,
-                numConfirmations: 0
+        uint _proposalIndex = proposals.length;
+        proposals.push(
+            Proposal({
+                index: _proposalIndex,
+                executed: false,
+                numConfirmations: 0,
+                proposalType: ProposalType.NFTTransaction,
+                proposalData: abi.encode(_to, _NFTAddress, _NFTid)
             })
         );
 
-        emit ProposeNFTTransaction(msg.sender, _NFTindex,_NFTAddress, _to,  _NFTid);
+        emit ProposeNFTTransaction(
+            msg.sender,
+            _proposalIndex,
+            _NFTAddress,
+            _to,
+            _NFTid
+        );
     }
 
-    function confirmNFTTransaction(
-        uint _NFTIndex
+    function _executeNFTTransaction(Proposal storage proposal) internal {
+        require(
+            proposal.numConfirmations >= numConfirmationsRequired,
+            "Number of confirmations too low"
+        );
+
+        (address _to, address _NFTAddress, uint _NFTid) = abi.decode(
+            proposal.proposalData,
+            (address, address, uint)
+        );
+
+        IERC721(_NFTAddress).safeTransferFrom(address(this), _to, _NFTid);
+
+        emit ExecuteNFTTransaction(msg.sender, proposal.index);
+    }
+
+    /**
+     * Change Owner
+     */
+    function proposeChangeOwner(
+        address _oldOwner,
+        address _newOwner
+    ) public onlyOwner {
+        require(!isOwner[_newOwner], "User is already an owner");
+        require(_newOwner != address(0), "New owner can't be zero address");
+
+        uint _proposalIndex = proposals.length;
+        proposals.push(
+            Proposal({
+                index: _proposalIndex,
+                executed: false,
+                numConfirmations: 0,
+                proposalType: ProposalType.ChangeOwner,
+                proposalData: abi.encode(
+                    _oldOwner,
+                    _newOwner,
+                    false,
+                    true,
+                    block.timestamp + 2 minutes
+                )
+            })
+        );
+
+        emit ProposeChangeOwner(
+            msg.sender,
+            _proposalIndex,
+            _oldOwner,
+            _newOwner
+        );
+    }
+
+    function _executeChangeOwner(Proposal storage proposal) internal {
+        require(
+            proposal.numConfirmations >= numConfirmationsRequired,
+            "Number of confirmations too low"
+        );
+
+        (
+            address _oldOwner,
+            address _newOwner,
+            bool _imHere,
+            bool _lock,
+            uint _timeToUnLock
+        ) = abi.decode(
+                proposal.proposalData,
+                (address, address, bool, bool, uint)
+            );
+
+        require(!_imHere, "called ImHere function");
+
+        if (block.timestamp >= _timeToUnLock && _lock) {
+            _lock = false;
+        }
+
+        require(_lock == false, "tempo non ancora passato");
+
+        for (uint256 i = 0; i < owners.length; i++) {
+            if (owners[i] == _oldOwner) {
+                owners[i] = _newOwner;
+                break;
+            }
+        }
+
+        isOwner[_oldOwner] = false;
+        isOwner[_newOwner] = true;
+
+        emit ExecuteChangeOwner(
+            msg.sender,
+            proposal.index,
+            _oldOwner,
+            _newOwner
+        );
+    }
+
+    // TODO verificare
+    function imAmHere(
+        uint _proposalIndex
     )
         public
         onlyOwner
-        NFTTransactionExists(_NFTIndex)
-        notExecutedNFTTransaction(_NFTIndex)
-        notConfirmedNFTTransaction(_NFTIndex)
+        proposalExists(_proposalIndex)
+        proposalNotExecuted(_proposalIndex)
     {
-        NFTTransaction storage NFTtransaction = nfts[_NFTIndex];
-        NFTtransaction.numConfirmations += 1;
-        isNFT[_NFTIndex][msg.sender] = true;
-
-        emit ConfirmTokenTransaction(msg.sender, _NFTIndex);
-    }
-
-    function executeNFTTransaction(
-        uint _NFTIndex
-    ) public onlyOwner NFTTransactionExists(_NFTIndex) notExecutedNFTTransaction(_NFTIndex) {
-        NFTTransaction storage NFTtransaction = nfts[_NFTIndex];
-
+        Proposal storage proposal = proposals[_proposalIndex];
         require(
-            NFTtransaction.numConfirmations >= numConfirmationsRequired,
-            "number confirmations too low"
+            proposal.proposalType == ProposalType.ChangeOwner,
+            "Can't call this function for this proposal"
         );
 
-        NFTtransaction.NFTExecuted = true;
+        (
+            address _oldOwner,
+            address _newOwner,
+            bool _imHere,
+            bool _lock,
+            uint _timeToUnLock
+        ) = abi.decode(
+                proposal.proposalData,
+                (address, address, bool, bool, uint)
+            );
 
-        
-        IERC721(NFTtransaction.NFTAddress).safeTransferFrom(address(this), NFTtransaction.to, NFTtransaction.NFTid);
+        require(_oldOwner == msg.sender, "You are not the old owner"); // Aggiunto, vedere con gli altri
+        require(
+            _timeToUnLock - block.timestamp > 0,
+            "Time to block execution has expired"
+        );
 
+        _imHere = true;
+        proposal.proposalData = abi.encode(
+            _oldOwner,
+            _newOwner,
+            _imHere,
+            _lock,
+            _timeToUnLock
+        );
 
-        emit ExecuteNFTTransaction(msg.sender, _NFTIndex);
+        emit ImAmHere(msg.sender, _proposalIndex);
     }
 
-    function revokeNFTConfirmation(
-        uint _NFTIndex
-    ) public onlyOwner NFTTransactionExists(_NFTIndex) notExecutedTokenTransaction(_NFTIndex) {
-        NFTTransaction storage NFTtransaction = nfts[_NFTIndex];
+    function getTimeToUnlock(uint _proposalIndex) public view returns (uint) {
+        Proposal storage proposal = proposals[_proposalIndex];
+        (
+            address _oldOwner,
+            address _newOwner,
+            bool _imHere,
+            bool _lock,
+            uint _timeToUnLock
+        ) = abi.decode(
+                proposal.proposalData,
+                (address, address, bool, bool, uint)
+            );
 
-        require(isNFT[_NFTIndex][msg.sender], "NFT transaction not confirmed");
-
-        NFTtransaction.numConfirmations -= 1;
-        isNFT[_NFTIndex][msg.sender] = false;
-
-        emit RevokeNFTConfirmation(msg.sender, _NFTIndex);
+        uint timeToUnlock = _timeToUnLock - block.timestamp;
+        return timeToUnlock > 0 ? timeToUnlock : 0;
     }
-    
 
-    function getTimeToUnlock(uint _rescueIndex) public view returns (uint) {
-        Rescue storage rescue = resc[_rescueIndex];
-        uint _timeToUnlock = rescue.timeToUnLock - block.timestamp;
-        return _timeToUnlock > 0 ? _timeToUnlock : 0;
-    }
     function getOwners() public view returns (address[] memory) {
         return owners;
     }
 
-    function getTransactionCount() public view returns (uint) {
-        return transactions.length;
+    function getProposalsCount() public view returns (uint) {
+        return proposals.length;
     }
 
-        function getOwnershipsCount() public view returns (uint) {
-        return ownerships.length;
-    }
-    function getDeletCount() public view returns (uint) {
-        return delet.length;
-    }
-    function getTresholdsCount() public view returns (uint) {
-        return tresholds.length;
-    }
-    function getRescCount() public view returns (uint) {
-        return resc.length;
-    }
-    function getTokenTxCount() public view returns (uint) {
-        return tokens.length;
-    }
-    function getNFTTxCount() public view returns (uint) {
-        return nfts.length;
-    }
+    /**
+     * TODO
+     * TUTTE QUESTE FUNZIONI CI SERVONO?
+     */
+    /*
     function getTransaction(
         uint _txIndex
     )
         public
         view
-        returns (
-            address to,
-            uint value,
-
-            bool executed,
-            uint numConfirmations
-        )
+        returns (address to, uint value, bool executed, uint numConfirmations)
     {
         Transaction storage transaction = transactions[_txIndex];
 
         return (
             transaction.to,
             transaction.value,
-            
             transaction.executed,
             transaction.numConfirmations
         );
     }
+
     function getOwnerships(
         uint _ownerIndex
     )
         public
         view
-        returns (
-            address newOwner,
-        bool addExecuted,
-        uint numConfirmations
-        )
+        returns (address newOwner, bool addExecuted, uint numConfirmations)
     {
         Ownership storage ownership = ownerships[_ownerIndex];
 
@@ -826,6 +700,7 @@ function excuteRemoveOwner(
             ownership.numConfirmations
         );
     }
+
     function getDelet(
         uint _removeIndex
     )
@@ -833,8 +708,8 @@ function excuteRemoveOwner(
         view
         returns (
             address addressRemove,
-        bool removeExecuted,
-        uint numConfirmations
+            bool removeExecuted,
+            uint numConfirmations
         )
     {
         Deleting storage deleting = delet[_removeIndex];
@@ -845,15 +720,16 @@ function excuteRemoveOwner(
             deleting.numConfirmations
         );
     }
+
     function getTreshold(
         uint _tresholdIndex
     )
         public
         view
         returns (
-           uint newNumTreshold,
-        bool tresholdExecuted,
-        uint numConfirmations
+            uint newNumTreshold,
+            bool tresholdExecuted,
+            uint numConfirmations
         )
     {
         Treshold storage treshold = tresholds[_tresholdIndex];
@@ -864,19 +740,20 @@ function excuteRemoveOwner(
             treshold.numConfirmations
         );
     }
+
     function getResc(
         uint _rescueIndex
     )
         public
         view
         returns (
-        address oldOwner,
-        address newOwner,
-        bool rescueExecuted,
-        uint numConfirmations,
-        bool imHere,
-        uint256 timeToUnLock,
-        bool lock
+            address oldOwner,
+            address newOwner,
+            bool rescueExecuted,
+            uint numConfirmations,
+            bool imHere,
+            uint256 timeToUnLock,
+            bool lock
         )
     {
         Rescue storage rescue = resc[_rescueIndex];
@@ -891,51 +768,55 @@ function excuteRemoveOwner(
             rescue.lock
         );
     }
+
     function getTokenTx(
         uint _tokenTransactionIndex
     )
         public
         view
         returns (
-         address tokenAddress,
-        address to,
-        uint value,
-        bool tokenExecuted,
-        uint numConfirmations
+            address tokenAddress,
+            address to,
+            uint value,
+            bool tokenExecuted,
+            uint numConfirmations
         )
     {
-        TokenTransaction storage tokenTransaction = tokens[_tokenTransactionIndex];
+        TokenTransaction storage tokenTransaction = tokens[
+            _tokenTransactionIndex
+        ];
 
         return (
-         tokenTransaction.tokenAddress,
-         tokenTransaction.to,
-         tokenTransaction.value,
-         tokenTransaction.tokenExecuted,
-         tokenTransaction.numConfirmations 
+            tokenTransaction.tokenAddress,
+            tokenTransaction.to,
+            tokenTransaction.value,
+            tokenTransaction.tokenExecuted,
+            tokenTransaction.numConfirmations
         );
     }
-        function getNFTTx(
+
+    function getNFTTx(
         uint _NFTIndex
     )
         public
         view
         returns (
-         address NFTAddress,
-        address to,
-        uint NFTid,
-        bool NFTExecuted,
-        uint numConfirmations  
+            address NFTAddress,
+            address to,
+            uint NFTid,
+            bool NFTExecuted,
+            uint numConfirmations
         )
     {
         NFTTransaction storage NFTtransaction = nfts[_NFTIndex];
 
         return (
-           NFTtransaction.NFTAddress,
-         NFTtransaction.to,
-         NFTtransaction.NFTid,
-         NFTtransaction.NFTExecuted,
-         NFTtransaction.numConfirmations 
+            NFTtransaction.NFTAddress,
+            NFTtransaction.to,
+            NFTtransaction.NFTid,
+            NFTtransaction.NFTExecuted,
+            NFTtransaction.numConfirmations
         );
     }
+    */
 }
-
