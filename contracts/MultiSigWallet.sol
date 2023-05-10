@@ -3,9 +3,10 @@ pragma solidity ^0.8.17;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 
 
-contract MultiSigWallet {
+contract MultiSigWalletTest is Initializable {
 
     function onERC721Received(address, address, uint256, bytes calldata) external pure returns (bytes4) {
         
@@ -251,8 +252,8 @@ modifier notExecutedNFTTransaction(uint _NFTIndex) {
         _;
     }
 
-    constructor(address[] memory _owners, uint _numConfirmationsRequired, uint _numTreshold) {
-        require(_owners.length > 1, "at least 2 owners required");
+    function initialize(address[] memory _owners, uint _numConfirmationsRequired, uint _numTreshold) initializer external {
+        
         require(
             _numConfirmationsRequired > 0 &&
                 _numConfirmationsRequired <= _owners.length,
