@@ -9,7 +9,7 @@ async function main() {
     const ALEX = "0x4165279351bFA40e821ac16AeA60ed29d9c1Bb29"
     const ALE = "0xf1913A1AAbB9B4e0B44f36c761c37c973dD1a05e"
     
-    const Test = await ethers.getContractFactory("MultiSigWalletTest");
+    const Test = await ethers.getContractFactory("MultiSigWallet");
     const test = await Test.deploy();
 
     await test.deployed();

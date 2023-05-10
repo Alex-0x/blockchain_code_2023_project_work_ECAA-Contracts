@@ -9,7 +9,7 @@ interface IMultiSig{
 
 }
 
-contract MultisigWalletFactory  {
+contract MultiSigWalletFactory  {
    address public implementationContract;
 
   constructor(address _implementationContract) {

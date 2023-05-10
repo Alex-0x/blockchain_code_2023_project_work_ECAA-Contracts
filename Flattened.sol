@@ -679,14 +679,14 @@ interface IERC20 {
 }
 
 
-// File contracts/Multisig.sol
+// File contracts/MultiSigWallet.sol
 
 // License-Identifier: UNLICENSED
 pragma solidity ^0.8.17;
 
 
 
-contract MultiSigWalletTest is Initializable {
+contract MultiSigWallet is Initializable {
 
     function onERC721Received(address, address, uint256, bytes calldata) external pure returns (bytes4) {
         
