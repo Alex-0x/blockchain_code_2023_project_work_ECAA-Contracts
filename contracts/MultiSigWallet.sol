@@ -76,6 +76,11 @@ contract MultiSigWalletAle is Initializable {
         uint indexed proposalIndex,
         uint newNumThreshold
     );
+    event ProposeChangeNumConfirmations(
+        address indexed owner,
+        uint indexed proposalIndex,
+        uint newNumConfirmations
+    );
     event ProposeChangeOwner(
         address indexed owner,
         uint indexed proposalIndex,
@@ -220,6 +225,10 @@ contract MultiSigWalletAle is Initializable {
             _executeRemoveOwner(proposal);
         } else if (proposal.proposalType == ProposalType.ChangeThreshold) {
             _executeChangeThreshold(proposal);
+        } else if (
+            proposal.proposalType == ProposalType.ChangeNumConfirmations
+        ) {
+            _executeChangeNumConfirmations(proposal);
         } else if (proposal.proposalType == ProposalType.ChangeOwner) {
             _executeChangeOwner(proposal);
         } else if (proposal.proposalType == ProposalType.TokenTransaction) {
@@ -240,14 +249,7 @@ contract MultiSigWalletAle is Initializable {
     /**
      * Transactions
      */
-    function proposeTransaction(
-        address _to,
-        uint _value
-    )
-        public
-        //data??
-        onlyOwner
-    {
+    function proposeTransaction(address _to, uint _value) public onlyOwner {
         uint _proposalIndex = proposals.length;
         proposals.push(
             Proposal({
@@ -385,6 +387,51 @@ contract MultiSigWalletAle is Initializable {
 
         uint _newThreshold = abi.decode(proposal.proposalData, (uint));
         numThreshold = _newThreshold;
+    }
+
+    /**
+     * Change Number of Confirmations Required
+     */
+    function proposeChangeNumConfirmations(
+        uint _newNumConfirmations
+    ) public onlyOwner {
+        require(
+            _newNumConfirmations > 0,
+            "Number of confirmations must be greater than 0"
+        );
+        require(
+            _newNumConfirmations <= owners.length,
+            "Number of confirmations must be lower than number of owners"
+        );
+
+        uint _proposalIndex = proposals.length;
+        proposals.push(
+            Proposal({
+                index: _proposalIndex,
+                executed: false,
+                numConfirmations: 0,
+                proposalType: ProposalType.ChangeNumConfirmations,
+                proposalData: abi.encode(_newNumConfirmations)
+            })
+        );
+
+        emit ProposeChangeNumConfirmations(
+            msg.sender,
+            _proposalIndex,
+            _newNumConfirmations
+        );
+    }
+
+    function _executeChangeNumConfirmations(
+        Proposal storage proposal
+    ) internal {
+        require(
+            proposal.numConfirmations >= numConfirmationsRequired,
+            "Number of confirmations too low"
+        );
+
+        uint _newNumConfirmations = abi.decode(proposal.proposalData, (uint));
+        numConfirmationsRequired = _newNumConfirmations;
     }
 
     /**
