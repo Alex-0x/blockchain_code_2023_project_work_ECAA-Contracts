@@ -7,9 +7,9 @@ async function main() {
     const factory = await Factory.deploy(address);
 
     await factory.deployed();
-
     
-
+    
+    
     console.log(
         `Factory deployed to ${factory.address}`
     );
