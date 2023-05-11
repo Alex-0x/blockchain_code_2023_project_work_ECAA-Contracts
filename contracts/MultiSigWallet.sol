@@ -5,7 +5,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 
-contract MultiSigWallet is Initializable {
+contract MultiSigWalletAle is Initializable {
     function onERC721Received(
         address,
         address,
@@ -20,6 +20,7 @@ contract MultiSigWallet is Initializable {
         NewOwner,
         RemoveOwner,
         ChangeThreshold,
+        ChangeNumConfirmations,
         ChangeOwner,
         TokenTransaction,
         NFTTransaction
@@ -49,55 +50,32 @@ contract MultiSigWallet is Initializable {
 
     // GENERIC EVENTS
     event Deposit(address indexed sender, uint amount, uint balance);
-    event ConfirmProposal(address indexed owner, uint indexed txIndex);
-    event RevokeConfirmation(address indexed owner, uint indexed txIndex);
+    event ConfirmProposal(address indexed owner, uint indexed proposalIndex);
+    event RevokeConfirmation(address indexed owner, uint indexed proposalIndex);
+    event ExecuteProposal(address indexed owner, uint indexed proposalIndex);
 
-    // TRANSACTION EVENTS
+    // SPECIFIC EVENTS
     event ProposeTransaction(
         address indexed owner,
         uint indexed proposalIndex,
         address indexed to,
         uint value
     );
-    event ExecuteTransaction(address indexed owner, uint indexed proposalIndex);
-
-    // NEW OWNER EVENTS
     event ProposeNewOwner(
         address indexed owner,
         uint indexed proposalIndex,
         address indexed newOwner
     );
-    event ExecuteNewOwner(
-        address indexed owner,
-        uint indexed proposalIndex,
-        address indexed newOwner
-    );
-
-    // REMOVE OWNER EVENTS
     event ProposeRemoveOwner(
         address indexed owner,
         uint indexed proposalIndex,
         address indexed addressToRemove
     );
-    event ExecuteRemoveOwner(
-        address indexed owner,
-        uint indexed proposalIndex,
-        address indexed addressToRemove
-    );
-
-    // CHANGE Threshold EVENTS
     event ProposeChangeThreshold(
         address indexed owner,
         uint indexed proposalIndex,
         uint newNumThreshold
     );
-    event ExecuteChangeThreshold(
-        address indexed owner,
-        uint indexed proposalIndex,
-        uint newNumThreshold
-    );
-
-    // CHANGE OWNER EVENTS
     event ProposeChangeOwner(
         address indexed owner,
         uint indexed proposalIndex,
@@ -105,14 +83,6 @@ contract MultiSigWallet is Initializable {
         address indexed newOwner
     );
     event ImAmHere(address indexed owner, uint indexed proposalIndex);
-    event ExecuteChangeOwner(
-        address indexed owner,
-        uint indexed proposalIndex,
-        address oldOwner,
-        address indexed newOwner
-    );
-
-    // TOKEN TRANSACTION EVENTS
     event ProposeTokenTransaction(
         address indexed owner,
         uint indexed proposalIndex,
@@ -120,22 +90,12 @@ contract MultiSigWallet is Initializable {
         address to,
         uint value
     );
-    event ExecuteTokenTransaction(
-        address indexed owner,
-        uint indexed proposalIndex
-    );
-
-    // NFT TRANSACTION EVENTS
     event ProposeNFTTransaction(
         address indexed owner,
         uint indexed proposalIndex,
         address NFTAddress,
         address to,
         uint value
-    );
-    event ExecuteNFTTransaction(
-        address indexed owner,
-        uint indexed proposalIndex
     );
 
     /*
@@ -241,9 +201,14 @@ contract MultiSigWallet is Initializable {
     }
 
     function executeProposal(
-        uint _txIndex
-    ) public onlyOwner proposalExists(_txIndex) proposalNotExecuted(_txIndex) {
-        Proposal storage proposal = proposals[_txIndex];
+        uint _proposalIndex
+    )
+        public
+        onlyOwner
+        proposalExists(_proposalIndex)
+        proposalNotExecuted(_proposalIndex)
+    {
+        Proposal storage proposal = proposals[_proposalIndex];
 
         proposal.executed = true;
 
@@ -262,6 +227,8 @@ contract MultiSigWallet is Initializable {
         } else if (proposal.proposalType == ProposalType.NFTTransaction) {
             _executeNFTTransaction(proposal);
         }
+
+        emit ExecuteProposal(msg.sender, proposal.index);
     }
 
     /*
@@ -308,8 +275,6 @@ contract MultiSigWallet is Initializable {
 
         (bool success, ) = _to.call{value: _value}("");
         require(success, "tx failed");
-
-        emit ExecuteTransaction(msg.sender, proposal.index);
     }
 
     /**
@@ -343,8 +308,6 @@ contract MultiSigWallet is Initializable {
 
         isOwner[_newOwner] = true;
         owners.push(_newOwner);
-
-        emit ExecuteNewOwner(msg.sender, proposal.index, _newOwner);
     }
 
     /**
@@ -388,8 +351,6 @@ contract MultiSigWallet is Initializable {
         }
 
         isOwner[_addressToRemove] = false;
-
-        emit ExecuteRemoveOwner(msg.sender, proposal.index, _addressToRemove);
     }
 
     /**
@@ -424,8 +385,6 @@ contract MultiSigWallet is Initializable {
 
         uint _newThreshold = abi.decode(proposal.proposalData, (uint));
         numThreshold = _newThreshold;
-
-        emit ExecuteChangeThreshold(msg.sender, proposal.index, _newThreshold);
     }
 
     /**
@@ -468,8 +427,6 @@ contract MultiSigWallet is Initializable {
         );
 
         IERC20(_tokenAddress).transfer(_to, _value);
-
-        emit ExecuteTokenTransaction(msg.sender, proposal.index);
     }
 
     /**
@@ -512,8 +469,6 @@ contract MultiSigWallet is Initializable {
         );
 
         IERC721(_NFTAddress).safeTransferFrom(address(this), _to, _NFTid);
-
-        emit ExecuteNFTTransaction(msg.sender, proposal.index);
     }
 
     /**
@@ -585,13 +540,6 @@ contract MultiSigWallet is Initializable {
 
         isOwner[_oldOwner] = false;
         isOwner[_newOwner] = true;
-
-        emit ExecuteChangeOwner(
-            msg.sender,
-            proposal.index,
-            _oldOwner,
-            _newOwner
-        );
     }
 
     // TODO verificare
@@ -662,161 +610,4 @@ contract MultiSigWallet is Initializable {
     function getProposalsCount() public view returns (uint) {
         return proposals.length;
     }
-
-    /**
-     * TODO
-     * TUTTE QUESTE FUNZIONI CI SERVONO?
-     */
-    /*
-    function getTransaction(
-        uint _txIndex
-    )
-        public
-        view
-        returns (address to, uint value, bool executed, uint numConfirmations)
-    {
-        Transaction storage transaction = transactions[_txIndex];
-
-        return (
-            transaction.to,
-            transaction.value,
-            transaction.executed,
-            transaction.numConfirmations
-        );
-    }
-
-    function getOwnerships(
-        uint _ownerIndex
-    )
-        public
-        view
-        returns (address newOwner, bool addExecuted, uint numConfirmations)
-    {
-        Ownership storage ownership = ownerships[_ownerIndex];
-
-        return (
-            ownership.newOwner,
-            ownership.addExecuted,
-            ownership.numConfirmations
-        );
-    }
-
-    function getDelet(
-        uint _removeIndex
-    )
-        public
-        view
-        returns (
-            address addressRemove,
-            bool removeExecuted,
-            uint numConfirmations
-        )
-    {
-        Deleting storage deleting = delet[_removeIndex];
-
-        return (
-            deleting.addressRemove,
-            deleting.removeExecuted,
-            deleting.numConfirmations
-        );
-    }
-
-    function getTreshold(
-        uint _tresholdIndex
-    )
-        public
-        view
-        returns (
-            uint newNumTreshold,
-            bool tresholdExecuted,
-            uint numConfirmations
-        )
-    {
-        Treshold storage treshold = tresholds[_tresholdIndex];
-
-        return (
-            treshold.newNumTreshold,
-            treshold.tresholdExecuted,
-            treshold.numConfirmations
-        );
-    }
-
-    function getResc(
-        uint _rescueIndex
-    )
-        public
-        view
-        returns (
-            address oldOwner,
-            address newOwner,
-            bool rescueExecuted,
-            uint numConfirmations,
-            bool imHere,
-            uint256 timeToUnLock,
-            bool lock
-        )
-    {
-        Rescue storage rescue = resc[_rescueIndex];
-
-        return (
-            rescue.oldOwner,
-            rescue.newOwner,
-            rescue.rescueExecuted,
-            rescue.numConfirmations,
-            rescue.imHere,
-            rescue.timeToUnLock,
-            rescue.lock
-        );
-    }
-
-    function getTokenTx(
-        uint _tokenTransactionIndex
-    )
-        public
-        view
-        returns (
-            address tokenAddress,
-            address to,
-            uint value,
-            bool tokenExecuted,
-            uint numConfirmations
-        )
-    {
-        TokenTransaction storage tokenTransaction = tokens[
-            _tokenTransactionIndex
-        ];
-
-        return (
-            tokenTransaction.tokenAddress,
-            tokenTransaction.to,
-            tokenTransaction.value,
-            tokenTransaction.tokenExecuted,
-            tokenTransaction.numConfirmations
-        );
-    }
-
-    function getNFTTx(
-        uint _NFTIndex
-    )
-        public
-        view
-        returns (
-            address NFTAddress,
-            address to,
-            uint NFTid,
-            bool NFTExecuted,
-            uint numConfirmations
-        )
-    {
-        NFTTransaction storage NFTtransaction = nfts[_NFTIndex];
-
-        return (
-            NFTtransaction.NFTAddress,
-            NFTtransaction.to,
-            NFTtransaction.NFTid,
-            NFTtransaction.NFTExecuted,
-            NFTtransaction.numConfirmations
-        );
-    }
-    */
 }
