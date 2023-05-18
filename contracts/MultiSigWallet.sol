@@ -39,7 +39,7 @@ contract MultiSigWalletAle is Initializable {
     mapping(uint => mapping(address => bool)) public isConfirmed;
     address[] public owners;
     mapping(address => bool) public isOwner;
-    uint public numConfirmationsRequired; // TODO non dobbiamo far modificare anche questo?
+    uint public numConfirmationsRequired;
     uint public numThreshold;
 
     /*
@@ -589,7 +589,6 @@ contract MultiSigWalletAle is Initializable {
         isOwner[_newOwner] = true;
     }
 
-    // TODO verificare
     function imAmHere(
         uint _proposalIndex
     )
@@ -615,7 +614,7 @@ contract MultiSigWalletAle is Initializable {
                 (address, address, bool, bool, uint)
             );
 
-        require(_oldOwner == msg.sender, "You are not the old owner"); // Aggiunto, vedere con gli altri
+        require(_oldOwner == msg.sender, "You are not the old owner");
         require(
             _timeToUnLock - block.timestamp > 0,
             "Time to block execution has expired"
