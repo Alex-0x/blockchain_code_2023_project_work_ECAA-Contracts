@@ -1286,6 +1286,7 @@ contract MultiSigWallet is Initializable {
             proposal.proposalType == ProposalType.ChangeOwner,
             "Can't call this function for this proposal"
         );
+       
 
         (
             address _oldOwner,
@@ -1297,6 +1298,8 @@ contract MultiSigWallet is Initializable {
                 proposal.proposalData,
                 (address, address, bool, bool, uint)
             );
+
+        require(!_imHere, "You have already called this function");
 
         require(_oldOwner == msg.sender, "You are not the old owner"); // Aggiunto, vedere con gli altri
         require(
@@ -1401,4 +1404,51 @@ contract MultiSigWallet is Initializable {
         function _decodeNFTTransactionData (bytes memory proposalData) internal pure returns (address NFTAddress, address to, uint NFTid){
             return abi.decode(proposalData, (address, address, uint));
         }
+}
+
+
+// File contracts/proxyFactory.sol
+
+// License-Identifier: UNLICENSED
+pragma solidity ^0.8.0;
+
+interface IMultiSig{
+
+ function initialize(address[] memory _owners, uint _numConfirmationsRequired, uint _numTreshold) external;
+
+}
+
+contract MultiSigWalletFactory  {
+   address public implementationContract;
+
+  constructor(address _implementationContract) {
+    implementationContract = _implementationContract;
+  }
+    event ProxyCreated(address proxy);
+   
+
+
+function clone(address implementation, address[] memory _owners, uint _numConfirmationsRequired, uint _numTreshold) internal returns (address instance) {
+        /// @solidity memory-safe-assembly
+        assembly {
+            // Cleans the upper 96 bits of the `implementation` word, then packs the first 3 bytes
+            // of the `implementation` address with the bytecode before the address.
+            mstore(0x00, or(shr(0xe8, shl(0x60, implementation)), 0x3d602d80600a3d3981f3363d3d373d3d3d363d73000000))
+            // Packs the remaining 17 bytes of `implementation` with the bytecode after the address.
+            mstore(0x20, or(shl(0x78, implementation), 0x5af43d82803e903d91602b57fd5bf3))
+            instance := create(0, 0x09, 0x37)
+        }
+        require(instance != address(0), "ERC1167: create failed");
+       
+       IMultiSig(instance).initialize(_owners, _numConfirmationsRequired, _numTreshold);
+       
+       emit ProxyCreated(address(instance));
+       return instance;
+            
+    }
+    
+    function createWallet(address[] memory _owners, uint _numConfirmationsRequired, uint _numTreshold) public returns (address){
+    address proxy = clone(implementationContract, _owners, _numConfirmationsRequired, _numTreshold);
+    return proxy;
+  }
 }

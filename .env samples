@@ -1,0 +1,4 @@
+PRIVATE_KEY =
+  "your private key here"
+
+POLYGONSCAN_API_KEY = "your api key here"

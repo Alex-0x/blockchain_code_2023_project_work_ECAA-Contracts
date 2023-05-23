@@ -608,6 +608,7 @@ contract MultiSigWallet is Initializable {
             proposal.proposalType == ProposalType.ChangeOwner,
             "Can't call this function for this proposal"
         );
+       
 
         (
             address _oldOwner,
@@ -619,6 +620,8 @@ contract MultiSigWallet is Initializable {
                 proposal.proposalData,
                 (address, address, bool, bool, uint)
             );
+
+        require(!_imHere, "You have already called this function");
 
         require(_oldOwner == msg.sender, "You are not the old owner"); // Aggiunto, vedere con gli altri
         require(
