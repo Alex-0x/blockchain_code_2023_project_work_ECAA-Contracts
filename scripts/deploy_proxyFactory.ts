@@ -2,7 +2,7 @@ import { ethers } from "hardhat";
 
 async function main() {
 
-    const address = "0xb27B8640CBccDa874182A9001bcCfA39B154C227"
+    const address = "0x5d5963918eB969531Cdaccb9D8374208f7c371b2"
     const Factory = await ethers.getContractFactory("MultiSigWalletFactory");
     const factory = await Factory.deploy(address);
 

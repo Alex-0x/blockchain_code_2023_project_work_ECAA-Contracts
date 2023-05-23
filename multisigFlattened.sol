@@ -679,13 +679,10 @@ interface IERC20 {
 }
 
 
-// File contracts/multisigWallet.sol
+// File contracts/multisig.sol
 
 // License-Identifier: UNLICENSED
 pragma solidity ^0.8.17;
-
-
-
 contract MultiSigWallet is Initializable {
     function onERC721Received(
         address,
@@ -701,7 +698,6 @@ contract MultiSigWallet is Initializable {
         NewOwner,
         RemoveOwner,
         ChangeThreshold,
-        ChangeNumConfirmations,
         ChangeOwner,
         TokenTransaction,
         NFTTransaction
@@ -715,12 +711,12 @@ contract MultiSigWallet is Initializable {
         bytes proposalData;
     }
 
-    Proposal[] public proposals;
+    Proposal[] public  proposals;
     // mapping from tx index => owner => bool
     mapping(uint => mapping(address => bool)) public isConfirmed;
     address[] public owners;
     mapping(address => bool) public isOwner;
-    uint public numConfirmationsRequired;
+    uint public numConfirmationsRequired; // TODO non dobbiamo far modificare anche questo?
     uint public numThreshold;
 
     /*
@@ -731,37 +727,55 @@ contract MultiSigWallet is Initializable {
 
     // GENERIC EVENTS
     event Deposit(address indexed sender, uint amount, uint balance);
-    event ConfirmProposal(address indexed owner, uint indexed proposalIndex);
-    event RevokeConfirmation(address indexed owner, uint indexed proposalIndex);
-    event ExecuteProposal(address indexed owner, uint indexed proposalIndex);
+    event ConfirmProposal(address indexed owner, uint indexed txIndex);
+    event RevokeConfirmation(address indexed owner, uint indexed txIndex);
 
-    // SPECIFIC EVENTS
+    // TRANSACTION EVENTS
     event ProposeTransaction(
         address indexed owner,
         uint indexed proposalIndex,
         address indexed to,
         uint value
     );
+    event ExecuteTransaction(address indexed owner, uint indexed proposalIndex);
+
+    // NEW OWNER EVENTS
     event ProposeNewOwner(
         address indexed owner,
         uint indexed proposalIndex,
         address indexed newOwner
     );
+    event ExecuteNewOwner(
+        address indexed owner,
+        uint indexed proposalIndex,
+        address indexed newOwner
+    );
+
+    // REMOVE OWNER EVENTS
     event ProposeRemoveOwner(
         address indexed owner,
         uint indexed proposalIndex,
         address indexed addressToRemove
     );
+    event ExecuteRemoveOwner(
+        address indexed owner,
+        uint indexed proposalIndex,
+        address indexed addressToRemove
+    );
+
+    // CHANGE Threshold EVENTS
     event ProposeChangeThreshold(
         address indexed owner,
         uint indexed proposalIndex,
         uint newNumThreshold
     );
-    event ProposeChangeNumConfirmations(
+    event ExecuteChangeThreshold(
         address indexed owner,
         uint indexed proposalIndex,
-        uint newNumConfirmations
+        uint newNumThreshold
     );
+
+    // CHANGE OWNER EVENTS
     event ProposeChangeOwner(
         address indexed owner,
         uint indexed proposalIndex,
@@ -769,6 +783,14 @@ contract MultiSigWallet is Initializable {
         address indexed newOwner
     );
     event ImAmHere(address indexed owner, uint indexed proposalIndex);
+    event ExecuteChangeOwner(
+        address indexed owner,
+        uint indexed proposalIndex,
+        address oldOwner,
+        address indexed newOwner
+    );
+
+    // TOKEN TRANSACTION EVENTS
     event ProposeTokenTransaction(
         address indexed owner,
         uint indexed proposalIndex,
@@ -776,6 +798,12 @@ contract MultiSigWallet is Initializable {
         address to,
         uint value
     );
+    event ExecuteTokenTransaction(
+        address indexed owner,
+        uint indexed proposalIndex
+    );
+
+    // NFT TRANSACTION EVENTS
     event ProposeNFTTransaction(
         address indexed owner,
         uint indexed proposalIndex,
@@ -783,8 +811,16 @@ contract MultiSigWallet is Initializable {
         address to,
         uint value
     );
+    event ExecuteNFTTransaction(
+        address indexed owner,
+        uint indexed proposalIndex
+    );
 
-    
+    /*
+     **********
+     * MODIFIER
+     **********
+     */
 
     modifier onlyOwner() {
         require(isOwner[msg.sender], "Must be an owner");
@@ -883,14 +919,9 @@ contract MultiSigWallet is Initializable {
     }
 
     function executeProposal(
-        uint _proposalIndex
-    )
-        public
-        onlyOwner
-        proposalExists(_proposalIndex)
-        proposalNotExecuted(_proposalIndex)
-    {
-        Proposal storage proposal = proposals[_proposalIndex];
+        uint _txIndex
+    ) public onlyOwner proposalExists(_txIndex) proposalNotExecuted(_txIndex) {
+        Proposal storage proposal = proposals[_txIndex];
 
         proposal.executed = true;
 
@@ -902,10 +933,6 @@ contract MultiSigWallet is Initializable {
             _executeRemoveOwner(proposal);
         } else if (proposal.proposalType == ProposalType.ChangeThreshold) {
             _executeChangeThreshold(proposal);
-        } else if (
-            proposal.proposalType == ProposalType.ChangeNumConfirmations
-        ) {
-            _executeChangeNumConfirmations(proposal);
         } else if (proposal.proposalType == ProposalType.ChangeOwner) {
             _executeChangeOwner(proposal);
         } else if (proposal.proposalType == ProposalType.TokenTransaction) {
@@ -913,8 +940,6 @@ contract MultiSigWallet is Initializable {
         } else if (proposal.proposalType == ProposalType.NFTTransaction) {
             _executeNFTTransaction(proposal);
         }
-
-        emit ExecuteProposal(msg.sender, proposal.index);
     }
 
     /*
@@ -926,7 +951,14 @@ contract MultiSigWallet is Initializable {
     /**
      * Transactions
      */
-    function proposeTransaction(address _to, uint _value) public onlyOwner {
+    function proposeTransaction(
+        address _to,
+        uint _value
+    )
+        public
+        //data??
+        onlyOwner
+    {
         uint _proposalIndex = proposals.length;
         proposals.push(
             Proposal({
@@ -954,6 +986,8 @@ contract MultiSigWallet is Initializable {
 
         (bool success, ) = _to.call{value: _value}("");
         require(success, "tx failed");
+
+        emit ExecuteTransaction(msg.sender, proposal.index);
     }
 
     /**
@@ -987,6 +1021,8 @@ contract MultiSigWallet is Initializable {
 
         isOwner[_newOwner] = true;
         owners.push(_newOwner);
+
+        emit ExecuteNewOwner(msg.sender, proposal.index, _newOwner);
     }
 
     /**
@@ -1030,6 +1066,8 @@ contract MultiSigWallet is Initializable {
         }
 
         isOwner[_addressToRemove] = false;
+
+        emit ExecuteRemoveOwner(msg.sender, proposal.index, _addressToRemove);
     }
 
     /**
@@ -1064,51 +1102,8 @@ contract MultiSigWallet is Initializable {
 
         uint _newThreshold = abi.decode(proposal.proposalData, (uint));
         numThreshold = _newThreshold;
-    }
 
-    /**
-     * Change Number of Confirmations Required
-     */
-    function proposeChangeNumConfirmations(
-        uint _newNumConfirmations
-    ) public onlyOwner {
-        require(
-            _newNumConfirmations > 0,
-            "Number of confirmations must be greater than 0"
-        );
-        require(
-            _newNumConfirmations <= owners.length,
-            "Number of confirmations must be lower than number of owners"
-        );
-
-        uint _proposalIndex = proposals.length;
-        proposals.push(
-            Proposal({
-                index: _proposalIndex,
-                executed: false,
-                numConfirmations: 0,
-                proposalType: ProposalType.ChangeNumConfirmations,
-                proposalData: abi.encode(_newNumConfirmations)
-            })
-        );
-
-        emit ProposeChangeNumConfirmations(
-            msg.sender,
-            _proposalIndex,
-            _newNumConfirmations
-        );
-    }
-
-    function _executeChangeNumConfirmations(
-        Proposal storage proposal
-    ) internal {
-        require(
-            proposal.numConfirmations >= numConfirmationsRequired,
-            "Number of confirmations too low"
-        );
-
-        uint _newNumConfirmations = abi.decode(proposal.proposalData, (uint));
-        numConfirmationsRequired = _newNumConfirmations;
+        emit ExecuteChangeThreshold(msg.sender, proposal.index, _newThreshold);
     }
 
     /**
@@ -1151,6 +1146,8 @@ contract MultiSigWallet is Initializable {
         );
 
         IERC20(_tokenAddress).transfer(_to, _value);
+
+        emit ExecuteTokenTransaction(msg.sender, proposal.index);
     }
 
     /**
@@ -1193,6 +1190,8 @@ contract MultiSigWallet is Initializable {
         );
 
         IERC721(_NFTAddress).safeTransferFrom(address(this), _to, _NFTid);
+
+        emit ExecuteNFTTransaction(msg.sender, proposal.index);
     }
 
     /**
@@ -1264,8 +1263,16 @@ contract MultiSigWallet is Initializable {
 
         isOwner[_oldOwner] = false;
         isOwner[_newOwner] = true;
+
+        emit ExecuteChangeOwner(
+            msg.sender,
+            proposal.index,
+            _oldOwner,
+            _newOwner
+        );
     }
 
+    // TODO verificare
     function imAmHere(
         uint _proposalIndex
     )
@@ -1279,6 +1286,7 @@ contract MultiSigWallet is Initializable {
             proposal.proposalType == ProposalType.ChangeOwner,
             "Can't call this function for this proposal"
         );
+       
 
         (
             address _oldOwner,
@@ -1291,8 +1299,9 @@ contract MultiSigWallet is Initializable {
                 (address, address, bool, bool, uint)
             );
 
-        require(!_imHere, "called ImHere function");
-        require(_oldOwner == msg.sender, "You are not the old owner");
+        require(!_imHere, "You have already called this function");
+
+        require(_oldOwner == msg.sender, "You are not the old owner"); // Aggiunto, vedere con gli altri
         require(
             _timeToUnLock - block.timestamp > 0,
             "Time to block execution has expired"
@@ -1334,51 +1343,65 @@ contract MultiSigWallet is Initializable {
     function getProposalsCount() public view returns (uint) {
         return proposals.length;
     }
-}
 
+    // PROPOSALS E' PUBLIC. ALTRIMENTI METTIAMO PRIVATE E FUNZIONE GETPROPOSAL ONLYOWNER
 
-// File contracts/proxyFactory.sol
+        function decodeProposalData (uint _proposalIndex) public view  {
 
-// License-Identifier: UNLICENSED
-pragma solidity ^0.8.0;
+             Proposal storage proposal = proposals[_proposalIndex];
 
-interface IMultiSig{
+             if (proposal.proposalType == ProposalType.Transaction){
 
- function initialize(address[] memory _owners, uint _numConfirmationsRequired, uint _numTreshold) external;
-
-}
-
-contract MultiSigWalletFactory  {
-   address public implementationContract;
-
-  constructor(address _implementationContract) {
-    implementationContract = _implementationContract;
-  }
-    event ProxyCreated(address proxy);
-   
-
-
-function clone(address implementation, address[] memory _owners, uint _numConfirmationsRequired, uint _numTreshold) internal returns (address instance) {
-        /// @solidity memory-safe-assembly
-        assembly {
-            // Cleans the upper 96 bits of the `implementation` word, then packs the first 3 bytes
-            // of the `implementation` address with the bytecode before the address.
-            mstore(0x00, or(shr(0xe8, shl(0x60, implementation)), 0x3d602d80600a3d3981f3363d3d373d3d3d363d73000000))
-            // Packs the remaining 17 bytes of `implementation` with the bytecode after the address.
-            mstore(0x20, or(shl(0x78, implementation), 0x5af43d82803e903d91602b57fd5bf3))
-            instance := create(0, 0x09, 0x37)
-        }
-        require(instance != address(0), "ERC1167: create failed");
-       
-       IMultiSig(instance).initialize(_owners, _numConfirmationsRequired, _numTreshold);
-       
-       emit ProxyCreated(address(instance));
-       return instance;
-            
-    }
+                _decodetransactionData(proposal.proposalData);
+             }
+             else if (proposal.proposalType == ProposalType.NewOwner){
+                    
+                    _decodeNewOwnerData(proposal.proposalData);
+                }
+                else if (proposal.proposalType == ProposalType.RemoveOwner){
     
-    function createWallet(address[] memory _owners, uint _numConfirmationsRequired, uint _numTreshold) public returns (address){
-    address proxy = clone(implementationContract, _owners, _numConfirmationsRequired, _numTreshold);
-    return proxy;
-  }
+                    _decodeRemoveOwnerData(proposal.proposalData);
+                }
+                else if (proposal.proposalType == ProposalType.ChangeThreshold){
+    
+                    _decodeChangeThresholdData(proposal.proposalData);
+                }
+                else if (proposal.proposalType == ProposalType.ChangeOwner){
+    
+                    _decodeChangeOwnerData(proposal.proposalData);
+                }
+                else if (proposal.proposalType == ProposalType.TokenTransaction){
+    
+                    _decodeTokenTransactionData(proposal.proposalData);
+                
+             }
+             else if (proposal.proposalType == ProposalType.NFTTransaction){
+    
+                _decodeNFTTransactionData(proposal.proposalData);    }
+
+            
+        }
+
+        function _decodetransactionData (bytes memory proposalData) internal pure returns (address to, uint value){
+            return abi.decode(proposalData, (address, uint));
+        }
+
+        function _decodeNewOwnerData (bytes memory proposalData) internal pure returns (address newOwner){
+            return abi.decode(proposalData, (address));
+        }
+        function _decodeRemoveOwnerData (bytes memory proposalData) internal pure returns (address addressToRemove){
+            return abi.decode(proposalData, (address));
+        }
+        function _decodeChangeThresholdData (bytes memory proposalData) internal pure returns (uint newNumThreshold){
+            return abi.decode(proposalData, (uint));
+        }
+        function _decodeChangeOwnerData (bytes memory proposalData) internal pure returns (address oldOwner, address newOwner, bool imHere, bool lock, uint timeToUnLock){
+            return abi.decode(proposalData, (address, address, bool, bool, uint));
+        }
+        function _decodeTokenTransactionData (bytes memory proposalData) internal pure returns (address tokenAddress, address to, uint value){
+            return abi.decode(proposalData, (address, address, uint));
+        }
+        function _decodeNFTTransactionData (bytes memory proposalData) internal pure returns (address NFTAddress, address to, uint NFTid){
+            return abi.decode(proposalData, (address, address, uint));
+        }
 }
